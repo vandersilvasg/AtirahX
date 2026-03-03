@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link, Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +16,15 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, isAuthenticated, user } = useAuth();
-  const navigate = useNavigate();
+  const { login, isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-background">
+        <p className="text-muted-foreground">Carregando sessao...</p>
+      </div>
+    );
+  }
 
   if (isAuthenticated) {
     const roleToRoute: Record<string, string> = {

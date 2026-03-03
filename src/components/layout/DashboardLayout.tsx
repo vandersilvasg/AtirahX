@@ -10,7 +10,15 @@ interface DashboardLayoutProps {
 }
 
 export const DashboardLayout = ({ children, requiredRoles }: DashboardLayoutProps) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-background">
+        <p className="text-muted-foreground">Carregando sessao...</p>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
