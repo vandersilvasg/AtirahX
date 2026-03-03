@@ -1,4 +1,5 @@
 import { getSystemSetting } from '@/hooks/useSystemSettings';
+import { supabase } from '@/lib/supabaseClient';
 
 /**
  * Interface para o resultado da análise do Gemini
@@ -28,6 +29,39 @@ const MIME_TYPE_MAP: Record<string, string> = {
   'image/jpg': 'image/jpeg',
   'image/webp': 'image/webp',
 };
+
+type GeminiProxyTask = 'exam' | 'conversation';
+
+interface GeminiProxyRequest {
+  task: GeminiProxyTask;
+  prompt: string;
+  preferredModel?: string;
+  inlineData?: {
+    mimeType: string;
+    data: string;
+  };
+}
+
+interface GeminiProxyResponse {
+  output: string;
+  modelUsed?: string;
+}
+
+async function invokeGeminiProxy(request: GeminiProxyRequest): Promise<GeminiProxyResponse> {
+  const { data, error } = await supabase.functions.invoke('gemini-analyzer', {
+    body: request,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Falha ao chamar serviço Gemini seguro');
+  }
+
+  if (!data || typeof data.output !== 'string' || data.output.trim() === '') {
+    throw new Error('Resposta inválida do serviço Gemini');
+  }
+
+  return data as GeminiProxyResponse;
+}
 
 /**
  * Converte um arquivo para base64
@@ -59,31 +93,16 @@ async function fileToBase64(file: File): Promise<string> {
  */
 export async function analyzeExamWithGemini(file: File): Promise<GeminiExamAnalysis> {
   try {
-    console.log('🔍 Iniciando análise com Gemini Flash...');
-    console.log('📄 Arquivo:', file.name, 'Tipo:', file.type, 'Tamanho:', file.size);
-
     // 1. Validar tipo de arquivo
     if (!MIME_TYPE_MAP[file.type]) {
       throw new Error(`Tipo de arquivo não suportado: ${file.type}. Suportados: PDF, PNG, JPEG, JPG, WEBP`);
     }
 
-    // 2. Buscar configurações do Gemini do system_settings
-    console.log('🔑 Buscando configurações do Gemini...');
-    const geminiApiKey = await getSystemSetting('gemini_api_key');
+    // 2. Buscar configuração opcional de modelo preferido
     const preferredModel = await getSystemSetting('gemini_model');
-    
-    if (!geminiApiKey) {
-      throw new Error('API key do Gemini não configurada. Configure em system_settings com a chave "gemini_api_key"');
-    }
-    
-    if (preferredModel) {
-      console.log(`🎯 Modelo preferido configurado: ${preferredModel}`);
-    }
 
     // 3. Converter arquivo para base64
-    console.log('📦 Convertendo arquivo para base64...');
     const base64Data = await fileToBase64(file);
-    console.log('✅ Conversão concluída');
 
     // 4. Preparar o prompt para análise de exames
     const prompt = `Você é um assistente médico especializado em análise de exames laboratoriais e de imagem.
@@ -122,131 +141,24 @@ Analise o documento/imagem fornecido e retorne uma análise detalhada em formato
 
 Analise agora o documento/imagem fornecido:`;
 
-    // 5. Fazer requisição para o Gemini API
-    console.log('🚀 Enviando requisição para Gemini API...');
-    
+    // 5. Fazer requisição para Edge Function segura (sem expor API key no frontend)
     const geminiMimeType = MIME_TYPE_MAP[file.type];
-    
-    // Lista de modelos para tentar (do mais recente ao mais antigo)
-    let modelsToTry = [
-      'gemini-2.0-flash',
-      'gemini-2.0-flash-exp',
-      'gemini-1.5-flash-latest',
-      'gemini-1.5-flash-002',
-      'gemini-1.5-flash',
-      'gemini-1.5-pro-latest',
-      'gemini-1.5-pro',
-      'gemini-pro-vision',
-      'gemini-pro',
-    ];
-    
-    // Se houver modelo preferido configurado, tentar ele primeiro
-    if (preferredModel && !modelsToTry.includes(preferredModel)) {
-      console.log(`➕ Adicionando modelo preferido ao início da lista: ${preferredModel}`);
-      modelsToTry = [preferredModel, ...modelsToTry];
-    } else if (preferredModel) {
-      // Se já está na lista, mover para o início
-      modelsToTry = [preferredModel, ...modelsToTry.filter(m => m !== preferredModel)];
-    }
-    
-    let response: Response | null = null;
-    let lastError: Error | null = null;
-    
-    // Tentar cada modelo até encontrar um que funcione
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`🔄 Tentando modelo: ${modelName}...`);
-        
-        response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: prompt,
-                    },
-                    {
-                      inline_data: {
-                        mime_type: geminiMimeType,
-                        data: base64Data,
-                      },
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.4,
-                topK: 32,
-                topP: 1,
-                maxOutputTokens: 8192,
-              },
-            }),
-          }
-        );
-        
-        // Se a resposta for 200, sucesso!
-        if (response.ok) {
-          console.log(`✅ Modelo ${modelName} funcionou!`);
-          break;
-        }
-        
-        // Se for 404, tentar próximo modelo
-        if (response.status === 404) {
-          console.log(`⚠️ Modelo ${modelName} não disponível (404), tentando próximo...`);
-          continue;
-        }
-        
-        // Outro erro, lançar exceção
-        const errorData = await response.json().catch(() => null);
-        throw new Error(`Erro ${response.status}: ${JSON.stringify(errorData)}`);
-        
-      } catch (error) {
-        console.error(`❌ Erro ao tentar ${modelName}:`, error);
-        lastError = error as Error;
-        continue;
-      }
-    }
-
-    // Verificar se conseguimos uma resposta válida
-    if (!response || !response.ok) {
-      const errorMsg = lastError 
-        ? `Nenhum modelo disponível. Último erro: ${lastError.message}` 
-        : 'Nenhum modelo do Gemini está disponível no momento';
-      
-      console.error('❌ Falha ao conectar com Gemini:', errorMsg);
-      
-      throw new Error(
-        `${errorMsg}\n\nVerifique:\n` +
-        `1. Sua API key está correta?\n` +
-        `2. A API key tem permissões para usar o Gemini?\n` +
-        `3. Você está em uma região suportada?\n` +
-        `4. Tente gerar uma nova API key em: https://makersuite.google.com/app/apikey`
-      );
-    }
-
-    const data = await response.json();
-    console.log('📥 Resposta recebida do Gemini');
+    const response = await invokeGeminiProxy({
+      task: 'exam',
+      prompt,
+      preferredModel: preferredModel || undefined,
+      inlineData: {
+        mimeType: geminiMimeType,
+        data: base64Data,
+      },
+    });
 
     // 6. Extrair o texto da resposta
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-      console.error('❌ Resposta inválida do Gemini:', data);
-      throw new Error('Resposta inválida da API do Gemini');
-    }
+    const generatedText = response.output;
 
-    const generatedText = data.candidates[0].content.parts[0].text;
-    
     if (!generatedText || generatedText.trim() === '') {
       throw new Error('O Gemini não conseguiu gerar uma análise para este arquivo');
     }
-
-    console.log('✅ Análise gerada com sucesso!');
-    console.log('📝 Tamanho da resposta:', generatedText.length, 'caracteres');
 
     // 7. Retornar análise no formato esperado
     const analysis: GeminiExamAnalysis = {
@@ -255,12 +167,10 @@ Analise agora o documento/imagem fornecido:`;
 
     return analysis;
   } catch (error) {
-    console.error('❌ Erro ao analisar exame com Gemini:', error);
-    
     if (error instanceof Error) {
       throw error;
     }
-    
+
     throw new Error('Erro desconhecido ao analisar exame');
   }
 }
@@ -379,49 +289,25 @@ export type AnalysisPeriod = 'dia_atual' | 'ultimos_7_dias' | 'ultimos_15_dias' 
  * console.log(summary.resumo_conversa);
  */
 export async function analyzeConversationWithGemini(
-  sessionId: string,
+  _sessionId: string,
   period: AnalysisPeriod,
   messages: Array<{ message: any; data_e_hora?: string }>
 ): Promise<ConversationSummary> {
   try {
-    console.log('🔍 [analyzeConversation] Iniciando análise de conversa com Gemini...');
-    console.log('📊 [analyzeConversation] Session ID:', sessionId);
-    console.log('📅 [analyzeConversation] Período:', period);
-    console.log('💬 [analyzeConversation] Total de mensagens:', messages.length);
-    console.log('📋 [analyzeConversation] Estrutura da primeira mensagem:', JSON.stringify(messages[0], null, 2));
-
     // 1. Filtrar mensagens por período
-    console.log('🔄 [analyzeConversation] Filtrando mensagens por período...');
     const filteredMessages = filterMessagesByPeriod(messages, period);
-    console.log(`📝 [analyzeConversation] Mensagens no período: ${filteredMessages.length}`);
 
     if (filteredMessages.length === 0) {
       throw new Error('Nenhuma mensagem encontrada no período selecionado.');
     }
 
-    // 2. Buscar API Key do Gemini
-    console.log('🔑 [analyzeConversation] Buscando API key do Gemini...');
-    const geminiApiKey = await getSystemSetting('gemini_api_key');
-    console.log('🔐 [analyzeConversation] API key recebida:', geminiApiKey ? 'Sim (length: ' + geminiApiKey.length + ')' : 'Não');
-    
-    if (!geminiApiKey) {
-      throw new Error('API key do Gemini não configurada. Configure em system_settings com a chave "gemini_api_key"');
-    }
-
-    console.log('✅ [analyzeConversation] API key validada com sucesso!');
-
-    // 3. Formatar mensagens para o prompt
-    console.log('📝 [analyzeConversation] Formatando mensagens para análise...');
+    // 2. Formatar mensagens para o prompt
     const conversationText = formatMessagesForAnalysis(filteredMessages);
-    console.log('✅ [analyzeConversation] Mensagens formatadas. Tamanho:', conversationText.length, 'caracteres');
-    
-    // 4. Calcular métricas básicas
-    console.log('📊 [analyzeConversation] Calculando métricas básicas...');
-    const metricas = calculateBasicMetrics(filteredMessages);
-    console.log('✅ [analyzeConversation] Métricas calculadas:', metricas);
 
-    // 5. Preparar o prompt para análise de conversa
-    console.log('🎯 [analyzeConversation] Preparando prompt para Gemini...');
+    // 3. Calcular métricas básicas
+    const metricas = calculateBasicMetrics(filteredMessages);
+
+    // 4. Preparar o prompt para análise de conversa
     const prompt = `Você é um assistente avançado de análise de conversas médicas via WhatsApp. Realize uma análise PROFUNDA e DETALHADA.
 
 Analise a conversa abaixo e retorne um JSON estruturado seguindo EXATAMENTE este formato:
@@ -592,116 +478,31 @@ ${conversationText}
 - Sugira melhorias ACIONÁVEIS
 - Retorne APENAS o JSON válido, sem markdown, sem explicações adicionais.`;
 
-    console.log('✅ [analyzeConversation] Prompt preparado. Tamanho:', prompt.length, 'caracteres');
+    // 5. Fazer requisição para Edge Function segura (sem expor API key no frontend)
+    const response = await invokeGeminiProxy({
+      task: 'conversation',
+      prompt,
+    });
 
-    // 6. Fazer requisição para o Gemini API
-    console.log('🚀 [analyzeConversation] Iniciando requisições para Gemini API...');
-    
-    const modelsToTry = [
-      'gemini-2.0-flash',
-      'gemini-2.0-flash-exp',
-      'gemini-1.5-flash-latest',
-      'gemini-1.5-flash-002',
-      'gemini-1.5-flash',
-      'gemini-1.5-pro-latest',
-      'gemini-1.5-pro',
-    ];
-    
-    console.log('📋 [analyzeConversation] Modelos a tentar:', modelsToTry);
-    
-    let response: Response | null = null;
-    let lastError: Error | null = null;
-    
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`🔄 [analyzeConversation] Tentando modelo: ${modelName}...`);
-        
-        response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: prompt,
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.3,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 8192,
-              },
-            }),
-          }
-        );
-        
-        if (response.ok) {
-          console.log(`✅ Modelo ${modelName} funcionou!`);
-          break;
-        }
-        
-        if (response.status === 404) {
-          console.log(`⚠️ Modelo ${modelName} não disponível (404), tentando próximo...`);
-          continue;
-        }
-        
-        const errorData = await response.json().catch(() => null);
-        throw new Error(`Erro ${response.status}: ${JSON.stringify(errorData)}`);
-        
-      } catch (error) {
-        console.error(`❌ Erro ao tentar ${modelName}:`, error);
-        lastError = error as Error;
-        continue;
-      }
-    }
+    // 6. Extrair o JSON da resposta
+    let generatedText = response.output;
 
-    if (!response || !response.ok) {
-      const errorMsg = lastError 
-        ? `Nenhum modelo disponível. Último erro: ${lastError.message}` 
-        : 'Nenhum modelo do Gemini está disponível no momento';
-      
-      throw new Error(errorMsg);
-    }
-
-    const data = await response.json();
-    console.log('📥 Resposta recebida do Gemini');
-
-    // 7. Extrair o JSON da resposta
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-      console.error('❌ Resposta inválida do Gemini:', data);
-      throw new Error('Resposta inválida da API do Gemini');
-    }
-
-    let generatedText = data.candidates[0].content.parts[0].text;
-    
     if (!generatedText || generatedText.trim() === '') {
       throw new Error('O Gemini não conseguiu gerar uma análise para esta conversa');
     }
 
     // Limpar possíveis markdown do JSON
     generatedText = generatedText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    
-    console.log('📝 Resposta do Gemini:', generatedText.substring(0, 200) + '...');
 
-    // 8. Parsear o JSON
+    // 7. Parsear o JSON
     let parsedResult: any;
     try {
       parsedResult = JSON.parse(generatedText);
-    } catch (parseError) {
-      console.error('❌ Erro ao parsear JSON:', parseError);
-      console.error('Texto recebido:', generatedText);
+    } catch {
       throw new Error('Erro ao processar resposta da IA. JSON inválido.');
     }
 
-    // 9. Montar resultado final com métricas reais
+    // 8. Montar resultado final com métricas reais
     const summary: ConversationSummary = {
       resumo_conversa: parsedResult.resumo_conversa || 'Resumo não disponível',
       nota_atendimento: Number(parsedResult.nota_atendimento) || 3,
@@ -764,17 +565,12 @@ ${conversationText}
       timeline: Array.isArray(parsedResult.timeline) ? parsedResult.timeline : [],
     };
 
-    console.log('✅ [analyzeConversation] Análise de conversa concluída com sucesso!');
-    console.log('📊 [analyzeConversation] Campos preenchidos:', Object.keys(summary));
     return summary;
-
   } catch (error) {
-    console.error('❌ Erro ao analisar conversa com Gemini:', error);
-    
     if (error instanceof Error) {
       throw error;
     }
-    
+
     throw new Error('Erro desconhecido ao analisar conversa');
   }
 }
@@ -957,4 +753,5 @@ function calculateResponseRate(messages: Array<{ message: any; data_e_hora?: str
   const rate = Math.floor((iaResponses / humanMessages) * 100);
   return `${rate}%`;
 }
+
 
