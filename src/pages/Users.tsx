@@ -35,7 +35,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { UserPlus, Calendar, Loader2, Trash2, Link, Clock, Globe, Shield, Video, Palette, Bell, Star, Check, X, Plus, CheckCircle, Edit, User, Mail, Phone, Stethoscope } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { webhookRequest } from '@/lib/webhookClient';
+
+type UserRole = 'owner' | 'doctor' | 'secretary';
+
+type ManagedUser = {
+  id: string;
+  auth_user_id: string;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  specialization?: string | null;
+  role: UserRole;
+  avatar_url?: string | null;
+  consultation_price?: number | null;
+};
+
+type CalendarData = Record<string, string>;
+
+type WebhookCalendarsResponse = {
+  count?: number;
+  calendars?: Array<CalendarData | string>;
+} | CalendarData | string;
+
+const getErrorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error ? err.message : fallback;
 
 export default function Users() {
   const navigate = useNavigate();
@@ -52,11 +76,11 @@ export default function Users() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<any>(null);
+  const [userToDelete, setUserToDelete] = useState<ManagedUser | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isLinkingSchedule, setIsLinkingSchedule] = useState(false);
-  const [webhookResponse, setWebhookResponse] = useState<any>(null);
+  const [webhookResponse, setWebhookResponse] = useState<WebhookCalendarsResponse | null>(null);
   const [isAddingCalendar, setIsAddingCalendar] = useState(false);
   const [deletingCalendarId, setDeletingCalendarId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>('');
@@ -65,7 +89,7 @@ export default function Users() {
   const [linkedCalendarId, setLinkedCalendarId] = useState<string | null>(null);
   const [linkingCalendarId, setLinkingCalendarId] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [userToEdit, setUserToEdit] = useState<any>(null);
+  const [userToEdit, setUserToEdit] = useState<ManagedUser | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [editFormData, setEditFormData] = useState({
     name: '',
@@ -149,9 +173,9 @@ export default function Users() {
       // Reseta o formulário e fecha o dialog
       setFormData({ name: '', email: '', phone: '', specialization: '', role: 'doctor', password: '' });
       setIsDialogOpen(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao criar usuário:', err);
-      toast.error(err.message || 'Erro ao criar usuário');
+      toast.error(getErrorMessage(err, 'Erro ao criar usuário'));
     } finally {
       setIsCreating(false);
     }
@@ -161,11 +185,11 @@ export default function Users() {
     navigate(`/users/${userId}/schedule`);
   };
 
-  const parseCalendarData = (data: any) => {
+  const parseCalendarData = (data: unknown): CalendarData => {
     // Se vier como string, faz o parse
     if (typeof data === 'string') {
       const lines = data.split('\n').filter(line => line.trim());
-      const calendar: any = {};
+      const calendar: CalendarData = {};
       lines.forEach((line: string) => {
         const colonIndex = line.indexOf(':');
         if (colonIndex > 0) {
@@ -180,7 +204,7 @@ export default function Users() {
     return data;
   };
 
-  const renderCalendarCard = (calendar: any, index: number) => {
+  const renderCalendarCard = (calendar: CalendarData, index: number) => {
     const calendarId = calendar['Calendar ID'] || '';
     const calendarName = calendar['Calendar Name'] || 'Agenda sem nome';
     const isDeleting = deletingCalendarId === calendarId;
@@ -314,9 +338,9 @@ export default function Users() {
 
       setLinkedCalendarId(calendarId);
       toast.success(`Agenda "${calendarName}" vinculada com sucesso!`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao vincular calendar:', err);
-      toast.error(err.message || 'Erro ao vincular agenda');
+      toast.error(getErrorMessage(err, 'Erro ao vincular agenda'));
     } finally {
       setLinkingCalendarId(null);
     }
@@ -331,39 +355,13 @@ export default function Users() {
       // Busca o calendar vinculado
       await fetchLinkedCalendar(userId);
       
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/gestao-agendas`, {
+      const data = await webhookRequest<WebhookCalendarsResponse>('/gestao-agendas', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
+        body: {
           userId,
-          funcao: 'leitura'
-        }),
+          funcao: 'leitura',
+        },
       });
-
-      console.log('Status da resposta:', response.status);
-      console.log('Headers da resposta:', response.headers);
-
-      if (!response.ok) {
-        throw new Error(`Erro na requisição: ${response.status}`);
-      }
-
-      // Primeiro pega como texto para ver o que vem
-      const textData = await response.text();
-      console.log('Resposta como texto:', textData);
-      console.log('Tamanho da resposta:', textData.length);
-
-      // Tenta fazer parse se for JSON, senão usa como string
-      let data;
-      try {
-        data = JSON.parse(textData);
-        console.log('Parse JSON bem sucedido:', data);
-      } catch {
-        console.log('Não é JSON, usando como string');
-        data = textData;
-      }
 
       console.log('Dados finais:', data);
       console.log('Tipo dos dados:', typeof data);
@@ -380,9 +378,9 @@ export default function Users() {
         setIsLinkModalOpen(true);
       }, 100);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao vincular agenda:', err);
-      toast.error(err.message || 'Erro ao vincular agenda');
+      toast.error(getErrorMessage(err, 'Erro ao vincular agenda'));
     } finally {
       setIsLinkingSchedule(false);
     }
@@ -393,30 +391,14 @@ export default function Users() {
     try {
       console.log('Adicionando calendário. UserId:', userId, 'Nome:', calendarName);
       
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/gestao-agendas`, {
+      const data = await webhookRequest<WebhookCalendarsResponse>('/gestao-agendas', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
+        body: {
           userId,
           funcao: 'adicionar',
-          calendarName
-        }),
+          calendarName,
+        },
       });
-
-      if (!response.ok) {
-        throw new Error(`Erro na requisição: ${response.status}`);
-      }
-
-      const textData = await response.text();
-      let data;
-      try {
-        data = JSON.parse(textData);
-      } catch {
-        data = textData;
-      }
 
       console.log('Resposta da adição:', data);
       toast.success('Calendário adicionado com sucesso!');
@@ -428,9 +410,9 @@ export default function Users() {
       // Recarrega a lista de agendas
       await handleLinkSchedule(userId);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao adicionar calendário:', err);
-      toast.error(err.message || 'Erro ao adicionar calendário');
+      toast.error(getErrorMessage(err, 'Erro ao adicionar calendário'));
     } finally {
       setIsAddingCalendar(false);
     }
@@ -450,30 +432,14 @@ export default function Users() {
     try {
       console.log('Deletando calendário. UserId:', userId, 'CalendarId:', calendarId);
       
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/gestao-agendas`, {
+      const data = await webhookRequest<WebhookCalendarsResponse>('/gestao-agendas', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
+        body: {
           userId,
           funcao: 'apagar',
-          calendarId
-        }),
+          calendarId,
+        },
       });
-
-      if (!response.ok) {
-        throw new Error(`Erro na requisição: ${response.status}`);
-      }
-
-      const textData = await response.text();
-      let data;
-      try {
-        data = JSON.parse(textData);
-      } catch {
-        data = textData;
-      }
 
       console.log('Resposta da exclusão:', data);
       toast.success('Calendário excluído com sucesso!');
@@ -481,15 +447,15 @@ export default function Users() {
       // Recarrega a lista de agendas
       await handleLinkSchedule(userId);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao deletar calendário:', err);
-      toast.error(err.message || 'Erro ao deletar calendário');
+      toast.error(getErrorMessage(err, 'Erro ao deletar calendário'));
     } finally {
       setDeletingCalendarId(null);
     }
   };
 
-  const handleEditClick = (user: any) => {
+  const handleEditClick = (user: ManagedUser) => {
     setUserToEdit(user);
     setEditFormData({
       name: user.name || '',
@@ -525,15 +491,15 @@ export default function Users() {
       toast.success('Usuário atualizado com sucesso!');
       setIsEditDialogOpen(false);
       setUserToEdit(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao atualizar usuário:', err);
-      toast.error(err.message || 'Erro ao atualizar usuário');
+      toast.error(getErrorMessage(err, 'Erro ao atualizar usuário'));
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const handleDeleteClick = (user: any) => {
+  const handleDeleteClick = (user: ManagedUser) => {
     // Proteção: não permite deletar a si mesmo
     if (user.auth_user_id === currentUser?.auth_id) {
       toast.error('Você não pode deletar seu próprio usuário');
@@ -588,9 +554,9 @@ export default function Users() {
       // Fecha o dialog e limpa o estado
       setIsDeleteDialogOpen(false);
       setUserToDelete(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao deletar usuário:', err);
-      toast.error(err.message || 'Erro ao deletar usuário');
+      toast.error(getErrorMessage(err, 'Erro ao deletar usuário'));
     } finally {
       setIsDeleting(false);
     }
@@ -892,7 +858,7 @@ export default function Users() {
                 // Verifica se tem o formato { count, calendars: [] }
                 if (data.calendars && Array.isArray(data.calendars)) {
                   // Filtra as agendas para remover as principais
-                  const nonPrimaryCalendars = data.calendars.filter((calendar: any) => {
+                  const nonPrimaryCalendars = data.calendars.filter((calendar: CalendarData | string) => {
                     const parsed = typeof calendar === 'string' 
                       ? parseCalendarData(calendar) 
                       : calendar;
@@ -942,7 +908,7 @@ export default function Users() {
 
                       {/* Lista de agendas em cards */}
                       <div className="space-y-4">
-                        {nonPrimaryCalendars.map((calendar: any, index: number) => {
+                        {nonPrimaryCalendars.map((calendar: CalendarData | string, index: number) => {
                           // Se a agenda vier como string, faz o parse
                           const parsedCalendar = typeof calendar === 'string' 
                             ? parseCalendarData(calendar) 
@@ -1238,3 +1204,4 @@ export default function Users() {
     </DashboardLayout>
   );
 }
+

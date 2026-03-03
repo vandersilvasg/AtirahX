@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { MagicBentoCard } from '@/components/bento/MagicBento';
 import { MonthCalendar } from '@/components/calendar/MonthCalendar';
@@ -9,7 +9,7 @@ import { EditEventModal } from '@/components/agenda/EditEventModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDoctorSchedule, DoctorSchedule as ScheduleType } from '@/hooks/useDoctorSchedule';
 import { supabase } from '@/lib/supabaseClient';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { webhookRequest } from '@/lib/webhookClient';
 import { 
   Dialog, 
   DialogContent, 
@@ -56,18 +56,96 @@ interface AgendaItem {
   isSelected?: boolean;
 }
 
-interface AgendaData {
-  [key: string]: any;
+type AgendaData = unknown;
+
+type ErrorWithMessage = {
+  message?: string;
+};
+
+type AgendaCalendarRow = {
+  'Calendar ID'?: string;
+  'Calendar Name'?: string;
+  'Time Zone'?: string;
+  'Access Role'?: string;
+  Color?: string;
+  'Primary Calendar'?: string;
+  Selected?: string;
+  events?: ExternalEvent[];
+};
+
+type AgendaListResponse = {
+  count?: number;
+  calendars?: AgendaCalendarRow[];
+};
+
+type ExternalEvent = {
+  id?: string;
+  eventId?: string;
+  summary?: string;
+  title?: string;
+  nome?: string;
+  name?: string;
+  subject?: string;
+  description?: string;
+  notes?: string;
+  descricao?: string;
+  status?: string;
+  data_inicio?: string;
+  scheduled_at?: string;
+  start_date?: string;
+  date?: string;
+  begin?: string;
+  calendarId?: string;
+  calendar_id?: string;
+  start?: {
+    dateTime?: string;
+    date?: string;
+  };
+  creator?: {
+    email?: string;
+    displayName?: string;
+  };
+  organizer?: {
+    email?: string;
+    displayName?: string;
+  };
+  events?: ExternalEvent[];
+};
+
+type AgendaDetailsResponse = {
+  events?: ExternalEvent[];
+  items?: ExternalEvent[];
+  data?: ExternalEvent[];
+  calendars?: Array<{
+    events?: ExternalEvent[];
+  }>;
+  body?:
+    | {
+        events?: ExternalEvent[];
+      }
+    | ExternalEvent[];
+};
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  if (isObject(error) && typeof (error as ErrorWithMessage).message === 'string') {
+    return (error as ErrorWithMessage).message as string;
+  }
+  return fallback;
 }
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Domingo' },
   { value: 1, label: 'Segunda-feira' },
-  { value: 2, label: 'Terça-feira' },
+  { value: 2, label: 'TerÃ§a-feira' },
   { value: 3, label: 'Quarta-feira' },
   { value: 4, label: 'Quinta-feira' },
   { value: 5, label: 'Sexta-feira' },
-  { value: 6, label: 'Sábado' },
+  { value: 6, label: 'SÃ¡bado' },
 ];
 
 export default function Agenda() {
@@ -76,42 +154,43 @@ export default function Agenda() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  // Estados para o modal de criação de eventos
+  // Estados para o modal de criaÃ§Ã£o de eventos
   const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
   const [createEventDate, setCreateEventDate] = useState<Date | undefined>();
   const [createEventStartTime, setCreateEventStartTime] = useState<string | undefined>();
 
-  // Estados para o modal de edição de eventos
+  // Estados para o modal de ediÃ§Ã£o de eventos
   const [isEditEventModalOpen, setIsEditEventModalOpen] = useState(false);
   const [eventToEdit, setEventToEdit] = useState<Appointment | null>(null);
 
-  // Estados para o modal de confirmação de exclusão
+  // Estados para o modal de confirmaÃ§Ã£o de exclusÃ£o
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<Appointment | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Estado para controlar o modo de visualização
+  // Estado para controlar o modo de visualizaÃ§Ã£o
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
 
-  // Estados para datas de cada modo de visualização
+  // Estados para datas de cada modo de visualizaÃ§Ã£o
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [currentWeekDate, setCurrentWeekDate] = useState(new Date());
   const [currentDayDate, setCurrentDayDate] = useState(new Date());
 
-  // Estados para gestão de agendas (owner)
+  // Estados para gestÃ£o de agendas (owner)
   const [agendas, setAgendas] = useState<AgendaItem[]>([]);
   const [selectedAgenda, setSelectedAgenda] = useState<string>('todos');
   const [agendaData, setAgendaData] = useState<AgendaData | null>(null);
   const [loadingAgendas, setLoadingAgendas] = useState(false);
   const [loadingAgendaData, setLoadingAgendaData] = useState(false);
   const [externalAppointments, setExternalAppointments] = useState<Appointment[]>([]);
+  const [doctorCalendarId, setDoctorCalendarId] = useState<string | null>(null);
 
-  // Hook para gerenciar horários (apenas para médicos)
+  // Hook para gerenciar horÃ¡rios (apenas para mÃ©dicos)
   const { schedules, saveSchedule, loading: schedulesLoading } = useDoctorSchedule(user?.role === 'doctor' ? user.id : '');
   const [isSaving, setIsSaving] = useState(false);
   const [localSchedules, setLocalSchedules] = useState<Record<number, ScheduleType>>({});
 
-  // Inicializa os horários locais quando os dados são carregados (apenas para médicos)
+  // Inicializa os horÃ¡rios locais quando os dados sÃ£o carregados (apenas para mÃ©dicos)
   useEffect(() => {
     if (user?.role !== 'doctor' || !user?.id) return;
     
@@ -119,12 +198,12 @@ export default function Agenda() {
     const scheduleMap: Record<number, ScheduleType> = {};
     
     if (schedules.length > 0) {
-      // Se há horários salvos, carrega do banco
+      // Se hÃ¡ horÃ¡rios salvos, carrega do banco
       schedules.forEach((schedule) => {
         scheduleMap[schedule.day_of_week] = schedule;
       });
       
-      // Preenche dias que não foram configurados ainda com valores padrão
+      // Preenche dias que nÃ£o foram configurados ainda com valores padrÃ£o
       DAYS_OF_WEEK.forEach((day) => {
         if (!scheduleMap[day.value]) {
           scheduleMap[day.value] = {
@@ -135,12 +214,12 @@ export default function Agenda() {
             appointment_duration: 30,
             break_start_time: '12:00',
             break_end_time: '13:00',
-            is_active: false, // Padrão: inativo para dias não configurados
+            is_active: false, // PadrÃ£o: inativo para dias nÃ£o configurados
           };
         }
       });
     } else if (!schedulesLoading) {
-      // Se não há horários salvos E já terminou de carregar, inicializa com valores padrão
+      // Se nÃ£o hÃ¡ horÃ¡rios salvos E jÃ¡ terminou de carregar, inicializa com valores padrÃ£o
       DAYS_OF_WEEK.forEach((day) => {
         scheduleMap[day.value] = {
           doctor_id: user.id,
@@ -150,49 +229,39 @@ export default function Agenda() {
           appointment_duration: 30,
           break_start_time: '12:00',
           break_end_time: '13:00',
-          is_active: day.value >= 1 && day.value <= 5, // Segunda a Sexta ativo por padrão
+          is_active: day.value >= 1 && day.value <= 5, // Segunda a Sexta ativo por padrÃ£o
         };
       });
     }
     
-    // Só atualiza se houver dados
+    // SÃ³ atualiza se houver dados
     if (Object.keys(scheduleMap).length > 0) {
       setLocalSchedules(scheduleMap);
     }
   }, [schedules, schedulesLoading, user?.role, user?.id]);
 
-  // Função para buscar lista de agendas (owner)
-  const fetchAgendas = async () => {
+  // FunÃ§Ã£o para buscar lista de agendas (owner)
+  const fetchAgendas = useCallback(async () => {
     if (user?.role !== 'owner') return;
 
     console.log('[Agenda] Buscando lista de agendas...');
     setLoadingAgendas(true);
     try {
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/gestao-agendas`, {
+      const data = await webhookRequest<AgendaListResponse>('/gestao-agendas', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ funcao: 'leitura' }),
+        body: { funcao: 'leitura' },
       });
-
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar agendas: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       console.log('[Agenda] Resposta do endpoint gestao-agendas:', data);
       
       // Processa a estrutura retornada pelo endpoint
       // Estrutura esperada: { count: X, calendars: [...] }
       let agendasList: AgendaItem[] = [];
       
-      if (data && data.calendars && Array.isArray(data.calendars)) {
-        // Mapeia os calendars para o formato esperado, excluindo calendários primários
+      if (data?.calendars && Array.isArray(data.calendars)) {
+        // Mapeia os calendars para o formato esperado, excluindo calendÃ¡rios primÃ¡rios
         agendasList = data.calendars
-          .filter((calendar: any) => calendar['Primary Calendar'] !== 'Yes')
-          .map((calendar: any) => ({
+          .filter((calendar) => calendar['Primary Calendar'] !== 'Yes')
+          .map((calendar) => ({
             id: calendar['Calendar ID'],
             nome: calendar['Calendar Name'],
             timeZone: calendar['Time Zone'],
@@ -209,125 +278,196 @@ export default function Agenda() {
       if (agendasList.length > 0) {
         toast.success(`${agendasList.length} agenda(s) carregada(s) com sucesso`);
       } else {
-        toast.info('Nenhuma agenda disponível no momento');
+        toast.info('Nenhuma agenda disponÃ­vel no momento');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Agenda] Erro ao buscar agendas:', error);
-      toast.error(`Erro ao buscar agendas: ${error.message}`);
+      toast.error(`Erro ao buscar agendas: ${getErrorMessage(error, 'falha inesperada')}`);
       setAgendas([]);
     } finally {
       setLoadingAgendas(false);
     }
-  };
+  }, [user?.role]);
 
   // Traduz nomes de feriados comuns
-  const translateHolidayName = (name: string): string => {
+  const translateHolidayName = useCallback((name: string): string => {
     const translations: Record<string, string> = {
-      "Our Lady of Aparecida / Children's Day": "Nossa Senhora Aparecida / Dia das Crianças",
+      "Our Lady of Aparecida / Children's Day": "Nossa Senhora Aparecida / Dia das CrianÃ§as",
       "Teacher's Day": "Dia do Professor",
-      "Public Service Holiday": "Dia do Servidor Público",
+      "Public Service Holiday": "Dia do Servidor PÃºblico",
       "New Year's Day": "Ano Novo",
       "Carnival": "Carnaval",
       "Good Friday": "Sexta-feira Santa",
       "Tiradentes' Day": "Tiradentes",
       "Labour Day": "Dia do Trabalhador",
       "Corpus Christi": "Corpus Christi",
-      "Independence Day": "Independência do Brasil",
+      "Independence Day": "IndependÃªncia do Brasil",
       "All Souls' Day": "Finados",
-      "Republic Day": "Proclamação da República",
-      "Black Consciousness Day": "Dia da Consciência Negra",
+      "Republic Day": "ProclamaÃ§Ã£o da RepÃºblica",
+      "Black Consciousness Day": "Dia da ConsciÃªncia Negra",
       "Christmas Day": "Natal",
-      "Christmas Eve": "Véspera de Natal",
+      "Christmas Eve": "VÃ©spera de Natal",
     };
     
     return translations[name] || name;
-  };
+  }, []);
+
+  /** Normaliza data para evitar deslocamento de dia por timezone. */
+  const normalizeEventDate = useCallback((value: string): string => {
+    if (!value || typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed + 'T12:00:00';
+    }
+    // Meia-noite UTC (ex: 2026-02-11T00:00:00Z) vira 21h do dia anterior no Brasil e o evento cai no dia errado
+    const midnightUtcMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})T00:00:00(\.\d+)?Z$/i);
+    if (midnightUtcMatch) {
+      return midnightUtcMatch[1] + 'T12:00:00';
+    }
+    return trimmed;
+  }, []);
 
   // Processa os eventos retornados do endpoint para o formato Appointment
-  const processExternalEvents = (data: any): Appointment[] => {
+  const processExternalEvents = useCallback((data: unknown): Appointment[] => {
     if (!data) return [];
     
     try {
-      let events: any[] = [];
+      let events: ExternalEvent[] = [];
       
-      // Tenta diferentes estruturas de resposta
+      // Tenta diferentes estruturas de resposta (incl. n8n/Google Calendar)
       if (Array.isArray(data)) {
-        events = data;
-      } else if (data.events && Array.isArray(data.events)) {
-        events = data.events;
-      } else if (data.items && Array.isArray(data.items)) {
-        events = data.items;
-      } else if (data.data && Array.isArray(data.data)) {
-        events = data.data;
+        events = data as ExternalEvent[];
+      } else if (isObject(data) && Array.isArray((data as AgendaDetailsResponse).events)) {
+        events = (data as AgendaDetailsResponse).events as ExternalEvent[];
+      } else if (isObject(data) && Array.isArray((data as AgendaDetailsResponse).items)) {
+        events = (data as AgendaDetailsResponse).items as ExternalEvent[];
+      } else if (isObject(data) && Array.isArray((data as AgendaDetailsResponse).data)) {
+        events = (data as AgendaDetailsResponse).data as ExternalEvent[];
+      } else if (isObject(data) && Array.isArray((data as AgendaDetailsResponse).calendars)) {
+        // Estrutura { calendars: [ { events: [...] }, ... ] } â€“ achata tudo
+        events = ((data as AgendaDetailsResponse).calendars ?? []).flatMap((cal) =>
+          Array.isArray(cal?.events) ? cal.events : []
+        );
+      } else if (
+        isObject(data) &&
+        isObject((data as AgendaDetailsResponse).body) &&
+        Array.isArray(((data as AgendaDetailsResponse).body as { events?: ExternalEvent[] }).events)
+      ) {
+        events = ((data as AgendaDetailsResponse).body as { events?: ExternalEvent[] }).events ?? [];
+      } else if (isObject(data) && Array.isArray((data as AgendaDetailsResponse).body)) {
+        events = (data as AgendaDetailsResponse).body as ExternalEvent[];
       }
       
-      console.log('[Agenda] Processando eventos:', events);
+      console.log('[Agenda] Processando eventos:', events.length, 'eventos brutos');
+      const any11 = events.filter((e) => {
+        const d = e?.start?.dateTime || e?.start?.date || e?.data_inicio || e?.scheduled_at || e?.start_date || e?.date || e?.begin || '';
+        return String(d).includes('-11T') || String(d).startsWith('2026-02-11') || String(d).includes('2026-02-11');
+      });
+      if (any11.length > 0) {
+        console.log('[Agenda] ðŸ” Evento(s) do DIA 11 na resposta da API:', any11);
+      } else {
+        console.warn('[Agenda] âš ï¸ Nenhum evento do dia 11 na resposta da API. A consulta do dia 11 pode nÃ£o estar sendo retornada pelo backend (n8n/Google Calendar).');
+      }
       
-      // Filtra eventos válidos e mapeia para o formato Appointment
+      // Filtra eventos vÃ¡lidos e mapeia para o formato Appointment
       return events
-        .filter((event: any) => {
-          // Remove objetos vazios ou sem ID/summary
-          return event && (event.id || event.eventId) && (event.summary || event.title);
+        .filter((event) => {
+          // Precisa ter algum identificador e pelo menos um campo que vire data
+          const hasId = event && (event.id || event.eventId);
+          const hasDate = event?.start?.dateTime || event?.start?.date || event?.data_inicio || event?.scheduled_at || event?.start_date || event?.date || event?.begin;
+          return hasId && hasDate;
         })
-        .map((event: any, index: number) => {
-          // Processa a data do evento
+        .map((event, index: number) => {
+          // Processa a data do evento (vÃ¡rios formatos possÃ­veis da API/Google Calendar)
           let scheduledAt: string;
           let isAllDayEvent = false;
           
           if (event.start?.dateTime) {
-            // Evento com hora específica
-            scheduledAt = event.start.dateTime;
+            scheduledAt = normalizeEventDate(event.start.dateTime);
           } else if (event.start?.date) {
-            // Evento de dia inteiro - usa a data com hora 00:00
-            scheduledAt = new Date(event.start.date + 'T00:00:00').toISOString();
+            scheduledAt = normalizeEventDate(event.start.date);
             isAllDayEvent = true;
           } else if (event.data_inicio) {
-            scheduledAt = event.data_inicio;
+            scheduledAt = normalizeEventDate(event.data_inicio);
           } else if (event.scheduled_at) {
-            scheduledAt = event.scheduled_at;
+            scheduledAt = normalizeEventDate(event.scheduled_at);
+          } else if (event.start_date) {
+            scheduledAt = normalizeEventDate(String(event.start_date));
+          } else if (event.date) {
+            scheduledAt = normalizeEventDate(String(event.date));
+          } else if (event.begin) {
+            scheduledAt = normalizeEventDate(String(event.begin));
           } else {
-            // Se não tem data válida, pula este evento
-            console.warn('[Agenda] Evento sem data válida:', event);
+            const raw = event?.start || event;
+            if (String(raw).includes('11') || (event?.summary || event?.title || '').toLowerCase().includes('11')) {
+              console.warn('[Agenda] âŒ DIA 11? Evento descartado (sem data vÃ¡lida):', event);
+            } else {
+              console.warn('[Agenda] Evento sem data vÃ¡lida:', event);
+            }
             return null;
           }
           
-          // Identifica se é um feriado
+          // Identifica se Ã© um feriado
           const isHoliday = event.creator?.email?.includes('holiday@group.v.calendar.google.com') ||
                            event.organizer?.email?.includes('holiday@group.v.calendar.google.com') ||
                            event.creator?.displayName?.toLowerCase().includes('holiday') ||
                            event.organizer?.displayName?.toLowerCase().includes('holiday');
           
-          // Traduz o nome se for feriado
+          // TÃ­tulo: aceita vÃ¡rios campos e fallback para "Sem tÃ­tulo"
+          const rawTitle = event.summary || event.title || event.nome || event.name || event.subject || '';
           const eventName = isHoliday 
-            ? translateHolidayName(event.summary || event.title || event.nome || 'Sem título')
-            : event.summary || event.title || event.nome || 'Sem título';
+            ? translateHolidayName(rawTitle || 'Sem tÃ­tulo')
+            : (rawTitle || 'Sem tÃ­tulo');
           
-          // Capturar o calendar_id SEMPRE do evento, NUNCA do filtro
-          // Prioridade: calendarId > calendar_id > organizer.email
+          // Capturar o calendar_id: prioridade calendarId > calendar_id > organizer.email
           const calendarId = event.calendarId || event.calendar_id || event.organizer?.email || null;
           
-          // Log para verificar se calendar_id está sendo capturado corretamente
+          // Log para verificar se calendar_id estÃ¡ sendo capturado corretamente
           if (index === 0) {
-            console.log('[Agenda] 🔍 DEBUG - Exemplo de evento processado:');
+            console.log('[Agenda] ðŸ” DEBUG - Exemplo de evento processado:');
             console.log('  - event.calendarId:', event.calendarId);
             console.log('  - event.calendar_id:', event.calendar_id);
             console.log('  - event.organizer?.email:', event.organizer?.email);
             console.log('  - Calendar ID FINAL:', calendarId);
-            console.log('  - ❌ ALERTA: É "todos"?', calendarId === 'todos');
+            console.log('  - âŒ ALERTA: Ã‰ "todos"?', calendarId === 'todos');
           }
           
-          // Se não conseguiu capturar o calendar_id, pula este evento
+          // Se nÃ£o conseguiu capturar o calendar_id, pula este evento
           if (!calendarId || calendarId === 'todos') {
-            console.warn('[Agenda] ⚠️ Evento sem calendar_id válido, será ignorado:', event);
+            const isDay11 = scheduledAt.includes('-11T') || scheduledAt.startsWith('2026-02-11') || scheduledAt.includes('2026-02-11');
+            if (isDay11) {
+              console.warn('[Agenda] âŒ DIA 11? Evento descartado (sem calendar_id vÃ¡lido). Adicione calendarId/calendar_id no evento ou use organizer.email:', event);
+            } else {
+              console.warn('[Agenda] âš ï¸ Evento sem calendar_id vÃ¡lido, serÃ¡ ignorado:', event);
+            }
             return null;
           }
           
+          // Determina o status real do evento baseado na data e no status do Google Calendar
+          let eventStatus: string;
+          if (isHoliday) {
+            eventStatus = 'holiday';
+          } else if (event.status === 'cancelled') {
+            eventStatus = 'cancelled';
+          } else {
+            // Verifica se o evento jÃ¡ passou para marcar como "concluÃ­do"
+            const eventDate = new Date(scheduledAt);
+            const now = new Date();
+            if (eventDate < now) {
+              eventStatus = 'completed';
+            } else if (event.status === 'confirmed') {
+              eventStatus = 'confirmed';
+            } else {
+              eventStatus = 'scheduled';
+            }
+          }
+
           return {
             id: event.id || event.eventId || `external-${index}`,
             patient_id: eventName,
             doctor_id: calendarId, // Armazena o calendar_id do Google Calendar (NUNCA "todos")
             scheduled_at: scheduledAt,
-            status: isHoliday ? 'holiday' : (event.status === 'confirmed' ? 'confirmed' : 'scheduled'),
+            status: eventStatus,
             notes: event.description || event.notes || event.descricao || '',
           };
         })
@@ -336,10 +476,10 @@ export default function Agenda() {
       console.error('[Agenda] Erro ao processar eventos:', error);
       return [];
     }
-  };
+  }, [normalizeEventDate, translateHolidayName]);
 
-  // Função para formatar data sem timezone (YYYY-MM-DDTHH:MM:SS)
-  const formatDateWithoutTimezone = (date: Date) => {
+  // FunÃ§Ã£o para formatar data sem timezone (YYYY-MM-DDTHH:MM:SS)
+  const formatDateWithoutTimezone = useCallback((date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -348,36 +488,34 @@ export default function Agenda() {
     const seconds = String(date.getSeconds()).padStart(2, '0');
     
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
-  };
+  }, []);
 
-  // Calcula o range de datas para o modo MENSAL
-  const getMonthDateRange = (date: Date) => {
+  // Calcula o range de datas para o modo MENSAL (com margem de 1 dia para evitar corte por timezone)
+  const getMonthDateRange = useCallback((date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
     
-    // Primeiro dia do mês às 00:00:00
-    const firstDay = new Date(year, month, 1, 0, 0, 0);
-    
-    // Último dia do mês às 23:59:59
-    const lastDay = new Date(year, month + 1, 0, 23, 59, 59);
+    // Margem: 1 dia antes do mÃªs e 1 dia depois, para nÃ£o perder eventos em bordas de fuso
+    const firstDay = new Date(year, month, 0, 0, 0, 0);       // Ãºltimo dia do mÃªs anterior 00:00
+    const lastDay = new Date(year, month + 1, 1, 23, 59, 59); // primeiro dia do mÃªs seguinte 23:59
     
     return {
       data_inicio: formatDateWithoutTimezone(firstDay),
       data_final: formatDateWithoutTimezone(lastDay),
     };
-  };
+  }, [formatDateWithoutTimezone]);
 
   // Calcula o range de datas para o modo SEMANAL
-  const getWeekDateRange = (date: Date) => {
+  const getWeekDateRange = useCallback((date: Date) => {
     const d = new Date(date);
-    const day = d.getDay(); // 0 = domingo, 6 = sábado
+    const day = d.getDay(); // 0 = domingo, 6 = sÃ¡bado
     
-    // Primeiro dia da semana (domingo) às 00:00:00
+    // Primeiro dia da semana (domingo) as 00:00:00
     const firstDay = new Date(d);
     firstDay.setDate(d.getDate() - day);
     firstDay.setHours(0, 0, 0, 0);
     
-    // Último dia da semana (sábado) às 23:59:59
+    // Ultimo dia da semana (sabado) as 23:59:59
     const lastDay = new Date(firstDay);
     lastDay.setDate(firstDay.getDate() + 6);
     lastDay.setHours(23, 59, 59, 999);
@@ -386,15 +524,15 @@ export default function Agenda() {
       data_inicio: formatDateWithoutTimezone(firstDay),
       data_final: formatDateWithoutTimezone(lastDay),
     };
-  };
+  }, [formatDateWithoutTimezone]);
 
-  // Calcula o range de datas para o modo DIÁRIO
-  const getDayDateRange = (date: Date) => {
-    // Início do dia às 00:00:00
+  // Calcula o range de datas para o modo DIÃRIO
+  const getDayDateRange = useCallback((date: Date) => {
+    // Inicio do dia as 00:00:00
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     
-    // Fim do dia às 23:59:59
+    // Fim do dia as 23:59:59
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     
@@ -402,15 +540,15 @@ export default function Agenda() {
       data_inicio: formatDateWithoutTimezone(startOfDay),
       data_final: formatDateWithoutTimezone(endOfDay),
     };
-  };
+  }, [formatDateWithoutTimezone]);
 
-  // Função para buscar detalhes de uma agenda específica ou todas (owner)
-  const fetchAgendaDetails = async (tipoBusca: 'todos' | 'individual', agendaId?: string) => {
-    if (user?.role !== 'owner') return;
+  // FunÃ§Ã£o para buscar detalhes de uma agenda especÃ­fica ou todas (owner)
+  const fetchAgendaDetails = useCallback(async (tipoBusca: 'todos' | 'individual', agendaId?: string) => {
+    if (user?.role !== 'owner' && user?.role !== 'doctor') return;
 
     setLoadingAgendaData(true);
     try {
-      // Seleciona o range de datas baseado no modo de visualização ativo
+      // Seleciona o range de datas baseado no modo de visualizaÃ§Ã£o ativo
       let dateRange;
       if (viewMode === 'month') {
         dateRange = getMonthDateRange(currentMonth);
@@ -436,25 +574,16 @@ export default function Agenda() {
       }
 
       console.log(`[Agenda] Buscando dados da agenda (modo: ${viewMode}) com body:`, body);
+      console.log('[Agenda] Intervalo solicitado: de', body.data_inicio, 'atÃ©', body.data_final, '(deve incluir dia 11)');
 
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/ver-agenda-medx`, {
+      const data = await webhookRequest<AgendaDetailsResponse | ExternalEvent[]>('/ver-agenda-medx', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
+        body,
       });
-
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar dados da agenda: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       console.log('[Agenda] Dados da agenda recebidos:', data);
       
       // Log detalhado do primeiro evento da resposta
-      let firstEvent = null;
+      let firstEvent: ExternalEvent | null = null;
       if (Array.isArray(data) && data.length > 0) {
         firstEvent = data[0];
       } else if (data?.events && data.events.length > 0) {
@@ -475,35 +604,69 @@ export default function Agenda() {
       
       setAgendaData(data);
       
-      // Processa os eventos e atualiza o calendário
+      // Processa os eventos e atualiza o calendÃ¡rio
       const processedEvents = processExternalEvents(data);
       console.log('[Agenda] Total de eventos processados:', processedEvents.length);
       if (processedEvents.length > 0) {
         console.log('[Agenda] Exemplo de evento processado (doctor_id/calendar_id):', processedEvents[0].doctor_id);
-        console.log('[Agenda] ⚠️ ATENÇÃO: Se doctor_id === "todos", há um problema na captura do calendar_id!');
+        console.log('[Agenda] âš ï¸ ATENÃ‡ÃƒO: Se doctor_id === "todos", hÃ¡ um problema na captura do calendar_id!');
       }
       setExternalAppointments(processedEvents);
       
       toast.success(`${processedEvents.length} evento(s) carregado(s) com sucesso`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Agenda] Erro ao buscar dados da agenda:', error);
-      toast.error(`Erro ao buscar dados da agenda: ${error.message}`);
+      toast.error(`Erro ao buscar dados da agenda: ${getErrorMessage(error, 'falha inesperada')}`);
       setAgendaData(null);
       setExternalAppointments([]);
     } finally {
       setLoadingAgendaData(false);
     }
-  };
+  }, [
+    currentDayDate,
+    currentMonth,
+    currentWeekDate,
+    getDayDateRange,
+    getMonthDateRange,
+    getWeekDateRange,
+    processExternalEvents,
+    user?.role,
+    viewMode,
+  ]);
 
-  // Carrega a lista de agendas quando o usuário é owner
+  // Carrega a lista de agendas quando o usuÃ¡rio Ã© owner
   useEffect(() => {
     if (user?.role === 'owner') {
-      console.log('[Agenda] Usuário é owner, carregando agendas automaticamente...');
+      console.log('[Agenda] UsuÃ¡rio Ã© owner, carregando agendas automaticamente...');
       fetchAgendas();
     }
-  }, [user?.role]);
+  }, [fetchAgendas, user?.role]);
 
-  // Busca dados da agenda quando a seleção, modo ou data muda
+  const fetchDoctorCalendarId = useCallback(async () => {
+    if (!user || user.role !== 'doctor') return;
+    try {
+      const { data, error } = await supabase
+        .from('profile_calendars')
+        .select('calendar_id, calendar_name')
+        .eq('profile_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data?.calendar_id) {
+        console.log('[Agenda] Calendar do mÃ©dico encontrado:', data.calendar_name);
+        setDoctorCalendarId(data.calendar_id);
+      } else {
+        setDoctorCalendarId(null);
+        toast.error('Agenda nÃ£o vinculada para este mÃ©dico');
+      }
+    } catch (error: unknown) {
+      console.error('[Agenda] Erro ao buscar agenda do mÃ©dico:', error);
+      toast.error('Erro ao buscar agenda do mÃ©dico');
+    }
+  }, [user]);
+
+  // Busca dados da agenda quando a seleÃ§Ã£o, modo ou data muda
   useEffect(() => {
     if (user?.role === 'owner' && selectedAgenda) {
       if (selectedAgenda === 'todos') {
@@ -512,15 +675,27 @@ export default function Agenda() {
         fetchAgendaDetails('individual', selectedAgenda);
       }
     }
-  }, [user?.role, selectedAgenda, viewMode, currentMonth, currentWeekDate, currentDayDate]);
+  }, [fetchAgendaDetails, selectedAgenda, user?.role]);
+
+  useEffect(() => {
+    if (user?.role === 'doctor') {
+      fetchDoctorCalendarId();
+    }
+  }, [fetchDoctorCalendarId, user?.role, user?.id]);
+
+  useEffect(() => {
+    if (user?.role === 'doctor' && doctorCalendarId) {
+      fetchAgendaDetails('individual', doctorCalendarId);
+    }
+  }, [doctorCalendarId, fetchAgendaDetails, user?.role]);
 
   const handleAppointmentClick = async (appointment: Appointment) => {
     console.log('[Agenda] Evento clicado:', appointment);
     
-    // Criar cópia do appointment para não modificar o original
+    // Criar cÃ³pia do appointment para nÃ£o modificar o original
     const appointmentCopy = { ...appointment };
     
-    // Buscar nome do médico pelo calendar_id
+    // Buscar nome do mÃ©dico pelo calendar_id
     if (appointmentCopy.doctor_id && appointmentCopy.doctor_id !== 'todos') {
       try {
         // Buscar o calendar_id na tabela profile_calendars
@@ -533,7 +708,7 @@ export default function Agenda() {
         if (calendarData) {
           console.log('[Agenda] Calendar encontrado:', calendarData.calendar_name);
           
-          // Buscar o nome do médico pelo profile_id
+          // Buscar o nome do mÃ©dico pelo profile_id
           const { data: profileData } = await supabase
             .from('profiles')
             .select('name')
@@ -541,12 +716,12 @@ export default function Agenda() {
             .single();
           
           if (profileData) {
-            console.log('[Agenda] ✅ Nome do médico encontrado:', profileData.name);
-            // Substitui o doctor_id pelo nome do médico para exibição
+            console.log('[Agenda] âœ… Nome do mÃ©dico encontrado:', profileData.name);
+            // Substitui o doctor_id pelo nome do mÃ©dico para exibiÃ§Ã£o
             appointmentCopy.doctor_id = profileData.name;
           } else {
-            // Se não encontrou o perfil, usa o nome do calendário
-            console.log('[Agenda] Usando nome do calendário:', calendarData.calendar_name);
+            // Se nÃ£o encontrou o perfil, usa o nome do calendÃ¡rio
+            console.log('[Agenda] Usando nome do calendÃ¡rio:', calendarData.calendar_name);
             appointmentCopy.doctor_id = calendarData.calendar_name || appointmentCopy.doctor_id;
           }
         } else {
@@ -556,11 +731,11 @@ export default function Agenda() {
             console.log('[Agenda] Usando nome da agenda:', agenda.nome);
             appointmentCopy.doctor_id = agenda.nome;
           } else {
-            console.warn('[Agenda] ⚠️ Não foi possível encontrar nome do médico para calendar_id:', appointmentCopy.doctor_id);
+            console.warn('[Agenda] âš ï¸ NÃ£o foi possÃ­vel encontrar nome do mÃ©dico para calendar_id:', appointmentCopy.doctor_id);
           }
         }
       } catch (error) {
-        console.error('[Agenda] Erro ao buscar nome do médico:', error);
+        console.error('[Agenda] Erro ao buscar nome do mÃ©dico:', error);
       }
     }
     
@@ -569,32 +744,32 @@ export default function Agenda() {
   };
 
   const handleDayClick = (date: Date) => {
-    console.log('[Agenda] Dia/horário clicado:', date);
+    console.log('[Agenda] Dia/horÃ¡rio clicado:', date);
     
     // Define a data do evento
     setCreateEventDate(date);
     
-    // Define o horário inicial baseado no clique
-    // Se já tem horário (modo diário), usa ele
-    // Caso contrário, usa 09:00 como padrão
+    // Define o horÃ¡rio inicial baseado no clique
+    // Se jÃ¡ tem horÃ¡rio (modo diÃ¡rio), usa ele
+    // Caso contrÃ¡rio, usa 09:00 como padrÃ£o
     const hours = date.getHours();
     const minutes = date.getMinutes();
     
     if (hours === 0 && minutes === 0) {
-      // Clique em dia sem horário específico (modo mensal/semanal)
+      // Clique em dia sem horÃ¡rio especÃ­fico (modo mensal/semanal)
       setCreateEventStartTime('09:00');
     } else {
-      // Clique com horário específico (modo diário)
+      // Clique com horÃ¡rio especÃ­fico (modo diÃ¡rio)
       setCreateEventStartTime(
         `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
       );
     }
     
-    // Abre o modal de criação
+    // Abre o modal de criaÃ§Ã£o
     setIsCreateEventModalOpen(true);
   };
 
-  // Callback quando um evento é criado
+  // Callback quando um evento Ã© criado
   const handleEventCreated = () => {
     console.log('[Agenda] Evento criado, recarregando dados...');
     
@@ -608,7 +783,7 @@ export default function Agenda() {
     }
   };
 
-  // Callback quando um evento é atualizado
+  // Callback quando um evento Ã© atualizado
   const handleEventUpdated = () => {
     console.log('[Agenda] Evento atualizado, recarregando dados...');
     
@@ -625,7 +800,7 @@ export default function Agenda() {
     }
   };
 
-  // Callback quando um evento é deletado
+  // Callback quando um evento Ã© deletado
   const handleEventDeleted = () => {
     console.log('[Agenda] Evento deletado, recarregando dados...');
     
@@ -642,13 +817,13 @@ export default function Agenda() {
     }
   };
 
-  // Abrir modal de edição
+  // Abrir modal de ediÃ§Ã£o
   const handleEditEvent = (appointment: Appointment) => {
     setEventToEdit(appointment);
     setIsEditEventModalOpen(true);
   };
 
-  // Abrir confirmação de exclusão
+  // Abrir confirmaÃ§Ã£o de exclusÃ£o
   const handleDeleteEventClick = (appointment: Appointment) => {
     // Encontrar o evento original com o calendar_id correto
     const originalEvent = externalAppointments.find(apt => apt.id === appointment.id);
@@ -666,8 +841,8 @@ export default function Agenda() {
 
     // Validar calendar_id
     if (!eventToDelete.doctor_id || eventToDelete.doctor_id === 'todos') {
-      toast.error('Agenda não identificada para este evento');
-      console.error('[Agenda] Calendar ID inválido:', eventToDelete.doctor_id);
+      toast.error('Agenda nÃ£o identificada para este evento');
+      console.error('[Agenda] Calendar ID invÃ¡lido:', eventToDelete.doctor_id);
       return;
     }
 
@@ -681,23 +856,12 @@ export default function Agenda() {
       console.log('[Agenda] Deletando evento - Payload:', payload);
       toast.loading('Deletando evento...');
 
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/apagar-evento`, {
+      const data = await webhookRequest<unknown>('/apagar-evento', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        body: payload,
       });
 
       toast.dismiss();
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao deletar evento: ${response.statusText}. ${errorText}`);
-      }
-
-      const data = await response.json();
       console.log('[Agenda] Resposta do endpoint:', data);
 
       toast.success('Evento deletado com sucesso!');
@@ -715,9 +879,9 @@ export default function Agenda() {
           fetchAgendaDetails('individual', selectedAgenda);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Agenda] Erro ao deletar evento:', error);
-      toast.error('Erro ao deletar evento: ' + error.message);
+      toast.error('Erro ao deletar evento: ' + getErrorMessage(error, 'falha inesperada'));
     } finally {
       setIsDeleting(false);
     }
@@ -730,18 +894,18 @@ export default function Agenda() {
     // Encontrar o evento
     const event = externalAppointments.find(apt => apt.id === eventId);
     if (!event) {
-      toast.error('Evento não encontrado');
+      toast.error('Evento nÃ£o encontrado');
       return;
     }
 
-    // Se for feriado, não pode mover
+    // Se for feriado, nÃ£o pode mover
     if (event.status === 'holiday') {
-      toast.error('Feriados não podem ser movidos');
+      toast.error('Feriados nÃ£o podem ser movidos');
       return;
     }
 
     try {
-      // Buscar informações completas do paciente e médico
+      // Buscar informaÃ§Ãµes completas do paciente e mÃ©dico
       const { data: patientData } = await supabase
         .from('patients')
         .select('name, email, phone')
@@ -755,7 +919,7 @@ export default function Agenda() {
         .eq('role', 'doctor')
         .limit(1);
 
-      // Buscar calendar_id do médico
+      // Buscar calendar_id do mÃ©dico
       const { data: calendarData } = await supabase
         .from('profile_calendars')
         .select('profile_id, calendar_id')
@@ -793,8 +957,8 @@ export default function Agenda() {
 
       // Verificar se temos o calendar_id (NUNCA deve ser "todos")
       if (!event.doctor_id || event.doctor_id === 'todos') {
-        toast.error('Agenda não identificada para este evento');
-        console.error('[Agenda] Calendar ID inválido:', event.doctor_id);
+        toast.error('Agenda nÃ£o identificada para este evento');
+        console.error('[Agenda] Calendar ID invÃ¡lido:', event.doctor_id);
         return;
       }
 
@@ -807,7 +971,7 @@ export default function Agenda() {
         nome_medico: doctor?.name || '',
         email_medico: doctor?.email || '',
         especialidade_medico: doctor?.specialization || '',
-        tipo_consulta: 'retorno', // Mantém como retorno para eventos movidos
+        tipo_consulta: 'retorno', // MantÃ©m como retorno para eventos movidos
         data_inicio: formatDateTime(newDateTime),
         data_final: formatDateTime(endDateTime),
         notas: event.notes || '',
@@ -816,27 +980,16 @@ export default function Agenda() {
       console.log('[Agenda - Drag&Drop] Enviando para /editar-evento');
       console.log('Event ID:', eventId);
       console.log('Calendar ID (Agenda):', event.doctor_id);
-      console.log('⚠️ Verificação: Calendar ID é "todos"?', event.doctor_id === 'todos');
+      console.log('âš ï¸ VerificaÃ§Ã£o: Calendar ID Ã© "todos"?', event.doctor_id === 'todos');
       console.log('Payload completo:', payload);
       toast.loading('Movendo evento...');
 
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/editar-evento`, {
+      const data = await webhookRequest<unknown>('/editar-evento', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        body: payload,
       });
 
       toast.dismiss();
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao mover evento: ${response.statusText}. ${errorText}`);
-      }
-
-      const data = await response.json();
       console.log('[Agenda] Resposta do endpoint:', data);
 
       toast.success('Evento movido com sucesso!');
@@ -849,9 +1002,9 @@ export default function Agenda() {
           fetchAgendaDetails('individual', selectedAgenda);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Agenda] Erro ao mover evento:', error);
-      toast.error('Erro ao mover evento: ' + error.message);
+      toast.error('Erro ao mover evento: ' + getErrorMessage(error, 'falha inesperada'));
     }
   };
 
@@ -872,14 +1025,18 @@ export default function Agenda() {
       scheduled: 'Agendado',
       confirmed: 'Confirmado',
       cancelled: 'Cancelado',
-      completed: 'Concluído',
+      completed: 'ConcluÃ­do',
       pending: 'Pendente',
       holiday: 'Feriado',
     };
     return labels[status] || status;
   };
 
-  const handleScheduleChange = (dayOfWeek: number, field: keyof ScheduleType, value: any) => {
+  const handleScheduleChange = <K extends keyof ScheduleType>(
+    dayOfWeek: number,
+    field: K,
+    value: ScheduleType[K]
+  ) => {
     setLocalSchedules((prev) => ({
       ...prev,
       [dayOfWeek]: {
@@ -905,9 +1062,9 @@ export default function Agenda() {
       });
 
       await Promise.all(promises);
-      toast.success('Horários salvos com sucesso!');
-    } catch (error: any) {
-      toast.error('Erro ao salvar horários: ' + error.message);
+      toast.success('HorÃ¡rios salvos com sucesso!');
+    } catch (error: unknown) {
+      toast.error('Erro ao salvar horÃ¡rios: ' + getErrorMessage(error, 'falha inesperada'));
     } finally {
       setIsSaving(false);
     }
@@ -916,21 +1073,21 @@ export default function Agenda() {
   // Sempre mostra dados do endpoint externo
   const displayedAppointments = externalAppointments;
 
-  // Renderiza a visualização da agenda (calendário)
+  // Renderiza a visualizaÃ§Ã£o da agenda (calendÃ¡rio)
   const renderAgendaView = () => (
     <div className="space-y-6">
-      {/* Filtro de agendas e seletor de visualização */}
+      {/* Filtro de agendas e seletor de visualizaÃ§Ã£o */}
       <MagicBentoCard contentClassName="p-6">
         <div className="flex flex-col gap-4">
-          {/* Linha 1: Filtro de médico (apenas owner) e Modo de Visualização */}
+          {/* Linha 1: Filtro de mÃ©dico (apenas owner) e Modo de VisualizaÃ§Ã£o */}
           <div className="flex flex-col md:flex-row md:items-end gap-4">
-            {/* Filtro por médico (apenas para owner) */}
+            {/* Filtro por mÃ©dico (apenas para owner) */}
             {user?.role === 'owner' && (
               <>
                 <div className="flex-1 space-y-2">
                   <Label htmlFor="agenda-filter" className="flex items-center gap-2">
                     <Filter className="h-4 w-4" />
-                    Filtrar por Médico
+                    Filtrar por MÃ©dico
                     {loadingAgendas && (
                       <span className="text-xs text-muted-foreground">(Carregando...)</span>
                     )}
@@ -942,11 +1099,11 @@ export default function Agenda() {
                   >
                     <SelectTrigger id="agenda-filter">
                       <SelectValue 
-                        placeholder={loadingAgendas ? "Carregando agendas..." : "Selecione um médico"} 
+                        placeholder={loadingAgendas ? "Carregando agendas..." : "Selecione um mÃ©dico"} 
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="todos">Todos os Médicos</SelectItem>
+                      <SelectItem value="todos">Todos os MÃ©dicos</SelectItem>
                       {agendas.map((agenda) => (
                         <SelectItem key={agenda.id} value={agenda.id}>
                           {agenda.nome}
@@ -954,7 +1111,7 @@ export default function Agenda() {
                       ))}
                       {!loadingAgendas && agendas.length === 0 && (
                         <SelectItem value="vazio" disabled>
-                          Nenhuma agenda disponível
+                          Nenhuma agenda disponÃ­vel
                         </SelectItem>
                       )}
                     </SelectContent>
@@ -980,10 +1137,10 @@ export default function Agenda() {
             )}
           </div>
 
-          {/* Linha 2: Modo de Visualização */}
+          {/* Linha 2: Modo de VisualizaÃ§Ã£o */}
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <Label className="text-sm font-medium">Modo de Visualização:</Label>
+            <Label className="text-sm font-medium">Modo de VisualizaÃ§Ã£o:</Label>
             <div className="flex gap-2">
               <Button
                 variant={viewMode === 'month' ? 'default' : 'outline'}
@@ -1004,7 +1161,7 @@ export default function Agenda() {
                 size="sm"
                 onClick={() => setViewMode('day')}
               >
-                Diário
+                DiÃ¡rio
               </Button>
             </div>
           </div>
@@ -1012,7 +1169,7 @@ export default function Agenda() {
         </div>
       </MagicBentoCard>
 
-      {/* Calendário */}
+      {/* CalendÃ¡rio */}
       <MagicBentoCard contentClassName="p-0 min-h-[calc(100vh-20rem)]">
         {!loadingAgendaData && (
           <>
@@ -1060,12 +1217,12 @@ export default function Agenda() {
     </div>
   );
 
-  // Renderiza a configuração de horários (apenas para médicos)
+  // Renderiza a configuraÃ§Ã£o de horÃ¡rios (apenas para mÃ©dicos)
   const renderScheduleConfig = () => (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <p className="text-muted-foreground">
-          Configure seus horários de trabalho para cada dia da semana
+          Configure seus horÃ¡rios de trabalho para cada dia da semana
         </p>
         <Button onClick={handleSaveSchedules} disabled={isSaving}>
           {isSaving ? (
@@ -1107,7 +1264,7 @@ export default function Agenda() {
                 {schedule.is_active && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor={`start-${day.value}`}>Início</Label>
+                      <Label htmlFor={`start-${day.value}`}>InÃ­cio</Label>
                       <Input
                         id={`start-${day.value}`}
                         type="time"
@@ -1132,7 +1289,7 @@ export default function Agenda() {
 
                     <div className="space-y-2">
                       <Label htmlFor={`duration-${day.value}`}>
-                        Duração da Consulta (min)
+                        DuraÃ§Ã£o da Consulta (min)
                       </Label>
                       <Input
                         id={`duration-${day.value}`}
@@ -1152,7 +1309,7 @@ export default function Agenda() {
 
                     <div className="space-y-2">
                       <Label htmlFor={`break-start-${day.value}`}>
-                        Início Intervalo
+                        InÃ­cio Intervalo
                       </Label>
                       <Input
                         id={`break-start-${day.value}`}
@@ -1203,11 +1360,11 @@ export default function Agenda() {
         </div>
 
         {user?.role === 'doctor' ? (
-          // Médicos veem abas: Visão Geral e Configurar Horários
+          // MÃ©dicos veem abas: VisÃ£o Geral e Configurar HorÃ¡rios
           <Tabs defaultValue="overview" className="w-full">
             <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-              <TabsTrigger value="schedule">Configurar Horários</TabsTrigger>
+              <TabsTrigger value="overview">VisÃ£o Geral</TabsTrigger>
+              <TabsTrigger value="schedule">Configurar HorÃ¡rios</TabsTrigger>
             </TabsList>
             
             <TabsContent value="overview" className="mt-6">
@@ -1233,8 +1390,8 @@ export default function Agenda() {
             </DialogTitle>
             <DialogDescription>
               {selectedAppointment?.status === 'holiday' 
-                ? 'Informações sobre o feriado nacional'
-                : 'Informações completas sobre o agendamento selecionado'}
+                ? 'InformaÃ§Ãµes sobre o feriado nacional'
+                : 'InformaÃ§Ãµes completas sobre o agendamento selecionado'}
             </DialogDescription>
           </DialogHeader>
           {selectedAppointment && (
@@ -1257,7 +1414,7 @@ export default function Agenda() {
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Médico</p>
+                    <p className="text-sm font-medium">MÃ©dico</p>
                     <p className="text-sm text-muted-foreground">{selectedAppointment.doctor_id}</p>
                   </div>
                 </div>
@@ -1282,7 +1439,7 @@ export default function Agenda() {
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Horário</p>
+                    <p className="text-sm font-medium">HorÃ¡rio</p>
                     <p className="text-sm text-muted-foreground">
                       {new Date(selectedAppointment.scheduled_at).toLocaleTimeString('pt-BR', {
                         hour: '2-digit',
@@ -1299,7 +1456,7 @@ export default function Agenda() {
                   <p className="text-sm font-medium">Status</p>
                   <Badge variant={getStatusBadgeVariant(selectedAppointment.status)}>
                     {getStatusLabel(selectedAppointment.status)}
-                    {selectedAppointment.status === 'holiday' && ' 🎉'}
+                    {selectedAppointment.status === 'holiday' && ' ðŸŽ‰'}
                   </Badge>
                 </div>
               </div>
@@ -1307,7 +1464,7 @@ export default function Agenda() {
               {selectedAppointment.status === 'holiday' && (
                 <div className="p-4 bg-gradient-to-r from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 rounded-lg border-l-4 border-l-purple-500 shadow-sm">
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl">🎉</span>
+                    <span className="text-2xl">ðŸŽ‰</span>
                     <div>
                       <p className="text-sm font-semibold text-purple-900 dark:text-purple-100">
                         Feriado Nacional
@@ -1363,7 +1520,7 @@ export default function Agenda() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de criação de evento */}
+      {/* Modal de criaÃ§Ã£o de evento */}
       <CreateEventModal
         open={isCreateEventModalOpen}
         onOpenChange={setIsCreateEventModalOpen}
@@ -1373,7 +1530,7 @@ export default function Agenda() {
         onEventCreated={handleEventCreated}
       />
 
-      {/* Modal de edição de evento */}
+      {/* Modal de ediÃ§Ã£o de evento */}
       <EditEventModal
         open={isEditEventModalOpen}
         onOpenChange={setIsEditEventModalOpen}
@@ -1382,13 +1539,13 @@ export default function Agenda() {
         onEventDeleted={handleEventDeleted}
       />
 
-      {/* Dialog de confirmação de exclusão */}
+      {/* Dialog de confirmaÃ§Ã£o de exclusÃ£o */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar ExclusÃ£o</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja deletar este evento? Esta ação não pode ser desfeita.
+              Tem certeza que deseja deletar este evento? Esta aÃ§Ã£o nÃ£o pode ser desfeita.
               {eventToDelete && (
                 <div className="mt-4 p-3 bg-muted rounded-md">
                   <p className="text-sm font-medium text-foreground">

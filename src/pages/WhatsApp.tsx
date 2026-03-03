@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
-import { listMedxSessions, listMessagesBySession, extractMessageText, MedxHistoryRow } from '@/lib/medxHistory';
+import { listMedxSessions, listMessagesBySession, extractMessageText, MedxHistoryRow, MedxSession } from '@/lib/medxHistory';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -17,12 +17,54 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 import { SummaryModal } from '@/components/whatsapp/SummaryModal';
 import { AssignDoctorModal } from '@/components/whatsapp/AssignDoctorModal';
 import { useAuth } from '@/contexts/AuthContext';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { webhookRequest } from '@/lib/webhookClient';
 import { toast } from 'sonner';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const APP_TZ = 'America/Sao_Paulo';
+
+type RealtimeRow = Record<string, unknown> | null;
+
+type ClassifiedSession = MedxSession & {
+  kind: 'patient' | 'pre_patient' | 'unknown';
+  displayName?: string;
+};
+
+type DoctorProfile = {
+  id: string;
+  name: string;
+  specialization?: string | null;
+};
+
+type DoctorJoinRow = {
+  doctor_id: string;
+  is_primary: boolean;
+  profiles: DoctorProfile | DoctorProfile[] | null;
+};
+
+type SendMessagePayload = {
+  session_id: string;
+  numero_paciente: string;
+  nome_login: string;
+  funcao: 'text' | 'audio' | 'arquivo';
+  texto: string;
+  base64?: string;
+  arquivo_nome?: string;
+  tipo_documento?: 'imagem' | 'arquivo';
+};
+
+function getStringField(row: RealtimeRow, key: string): string | undefined {
+  if (!row || typeof row !== 'object') return undefined;
+  const value = row[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function toDoctorProfile(value: DoctorProfile | DoctorProfile[] | null): DoctorProfile | null {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value;
+}
 
 function getMediaKind(url: string): 'image' | 'audio' | 'video' | 'pdf' | 'doc' | 'other' {
   const u = (url || '').toLowerCase();
@@ -132,7 +174,9 @@ function AudioBubble({ url, transcriptText }: { url: string; transcriptText?: st
         await audioRef.play();
         setIsPlaying(true);
       }
-    } catch {}
+    } catch (playError) {
+      console.error('[WhatsApp] Falha ao reproduzir audio:', playError);
+    }
   };
 
   const pct = duration > 0 ? Math.min(100, Math.max(0, (current / duration) * 100)) : 0;
@@ -248,7 +292,7 @@ export default function WhatsApp() {
       .channel('realtime:medx_history-ui')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'medx_history' }, (payload) => {
         queryClient.invalidateQueries({ queryKey: ['medx_sessions'] });
-        const sid = (payload.new as any)?.session_id as string | undefined;
+        const sid = getStringField(payload.new as RealtimeRow, 'session_id');
         if (sid && sid === selectedSessionId) {
           queryClient.invalidateQueries({ queryKey: ['medx_messages', selectedSessionId] });
         }
@@ -263,7 +307,9 @@ export default function WhatsApp() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'patient_doctors' }, (payload) => {
         // Atualizar médico atribuído quando houver alteração
-        const patientId = (payload.new as any)?.patient_id || (payload.old as any)?.patient_id;
+        const patientId =
+          getStringField(payload.new as RealtimeRow, 'patient_id') ||
+          getStringField(payload.old as RealtimeRow, 'patient_id');
         if (patientId === selectedSessionId) {
           queryClient.invalidateQueries({ queryKey: ['assigned_doctor', selectedSessionId] });
         }
@@ -278,32 +324,32 @@ export default function WhatsApp() {
   // Construir mapas para classificação
   const patientsMap = useMemo(() => {
     const m = new Map<string, string>();
-    (patientsMin as any[]).forEach((p: any) => m.set(p.id, p.name));
+    patientsMin.forEach((patient) => m.set(patient.id, patient.name));
     return m;
   }, [patientsMin]);
 
   const prePatientsMap = useMemo(() => {
     const m = new Map<string, string | null>();
-    (prePatientsMin as any[]).forEach((p: any) => m.set(p.id, p.name ?? null));
+    prePatientsMin.forEach((prePatient) => m.set(prePatient.id, prePatient.name ?? null));
     return m;
   }, [prePatientsMin]);
 
   // Sessões classificadas dinamicamente por tabelas atuais
-  const classifiedSessions = useMemo(() => {
-    return sessions.map((s: any) => {
-      if (patientsMap.has(s.sessionId)) {
-        return { ...s, kind: 'patient', displayName: patientsMap.get(s.sessionId) };
+  const classifiedSessions = useMemo<ClassifiedSession[]>(() => {
+    return sessions.map((session) => {
+      if (patientsMap.has(session.sessionId)) {
+        return { ...session, kind: 'patient', displayName: patientsMap.get(session.sessionId) };
       }
-      if (prePatientsMap.has(s.sessionId)) {
-        const name = prePatientsMap.get(s.sessionId);
-        return { ...s, kind: 'pre_patient', displayName: name ?? undefined };
+      if (prePatientsMap.has(session.sessionId)) {
+        const name = prePatientsMap.get(session.sessionId);
+        return { ...session, kind: 'pre_patient', displayName: name ?? undefined };
       }
-      return { ...s, kind: 'unknown' };
+      return { ...session, kind: 'unknown' };
     });
   }, [sessions, patientsMap, prePatientsMap]);
 
   const selectedSession = useMemo(() => {
-    return classifiedSessions.find((s: any) => s.sessionId === selectedSessionId) ?? null;
+    return classifiedSessions.find((session) => session.sessionId === selectedSessionId) ?? null;
   }, [classifiedSessions, selectedSessionId]);
 
   // Buscar telefone do paciente/pre-paciente da sessão (se tivermos nas tabelas)
@@ -326,11 +372,11 @@ export default function WhatsApp() {
         console.log('[WhatsApp] Resultado patients:', {
           error: p.error,
           data: p.data,
-          phone: (p.data as any)?.phone,
+          phone: p.data?.phone,
         });
         
-        if (!p.error && p.data && (p.data as any)?.phone) {
-          const phone = (p.data as any).phone as string;
+        if (!p.error && p.data?.phone) {
+          const phone = p.data.phone;
           // Limpar formato do WhatsApp: remover @s.whatsapp.net
           const cleanPhone = phone.trim().replace(/@s\.whatsapp\.net$/i, '');
           
@@ -349,11 +395,11 @@ export default function WhatsApp() {
         console.log('[WhatsApp] Resultado pre_patients:', {
           error: pp.error,
           data: pp.data,
-          phone: (pp.data as any)?.phone,
+          phone: pp.data?.phone,
         });
         
-        if (!pp.error && pp.data && (pp.data as any)?.phone) {
-          const phone = (pp.data as any).phone as string;
+        if (!pp.error && pp.data?.phone) {
+          const phone = pp.data.phone;
           // Limpar formato do WhatsApp: remover @s.whatsapp.net
           const cleanPhone = phone.trim().replace(/@s\.whatsapp\.net$/i, '');
           
@@ -404,13 +450,14 @@ export default function WhatsApp() {
         `)
         .eq('patient_id', selectedSessionId)
         .eq('is_primary', true)
-        .maybeSingle();
+        .maybeSingle<DoctorJoinRow>();
 
-      if (!primaryError && primaryData?.profiles) {
+      const primaryProfile = toDoctorProfile(primaryData?.profiles ?? null);
+      if (!primaryError && primaryProfile) {
         return {
-          id: (primaryData.profiles as any).id,
-          name: (primaryData.profiles as any).name,
-          specialization: (primaryData.profiles as any).specialization,
+          id: primaryProfile.id,
+          name: primaryProfile.name,
+          specialization: primaryProfile.specialization,
         };
       }
       
@@ -425,17 +472,18 @@ export default function WhatsApp() {
         .eq('patient_id', selectedSessionId)
         .order('created_at', { ascending: false })
         .limit(1)
-        .maybeSingle();
+        .maybeSingle<DoctorJoinRow>();
 
-      if (anyError || !anyData?.profiles) {
+      const fallbackProfile = toDoctorProfile(anyData?.profiles ?? null);
+      if (anyError || !fallbackProfile) {
         console.log('Nenhum médico atribuído ainda');
         return null;
       }
       
       return {
-        id: (anyData.profiles as any).id,
-        name: (anyData.profiles as any).name,
-        specialization: (anyData.profiles as any).specialization,
+        id: fallbackProfile.id,
+        name: fallbackProfile.name,
+        specialization: fallbackProfile.specialization,
       };
     },
     enabled: !!selectedSessionId,
@@ -513,15 +561,13 @@ export default function WhatsApp() {
     setSending(true);
 
     try {
-      // 4. Buscar URL base da API
-      const apiBaseUrl = await getApiBaseUrl();
-      
       // 5. Fazer requisição para o endpoint
-      const payload: any = {
+      const payload: SendMessagePayload = {
         session_id: selectedSessionId,
         numero_paciente: cleanPhone,
         nome_login: user.name,
         funcao: funcao,
+        texto: '',
       };
 
       // Estruturar payload de acordo com o tipo
@@ -547,23 +593,10 @@ export default function WhatsApp() {
         base64: payload.base64 ? `${payload.base64.substring(0, 50)}... (${payload.base64.length} chars)` : undefined
       });
 
-      const response = await fetch(`${apiBaseUrl}/enviar-mensagem`, {
+      const result = await webhookRequest<unknown>('/enviar-mensagem', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        body: payload,
       });
-
-      // 6. Verificar resposta
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `Erro ao enviar mensagem: ${response.status}`
-        );
-      }
-
-      const result = await response.json();
       console.log('✅ Resposta do servidor:', result);
 
       // 7. Sucesso - limpar campo e mostrar feedback
@@ -783,15 +816,15 @@ export default function WhatsApp() {
   const filteredSessions = useMemo(() => {
     const term = search.trim().toLowerCase();
     let list = classifiedSessions;
-    if (tab === 'pre') list = list.filter((s: any) => s.kind === 'pre_patient');
-    if (tab === 'crm') list = list.filter((s: any) => s.kind === 'patient');
+    if (tab === 'pre') list = list.filter((session) => session.kind === 'pre_patient');
+    if (tab === 'crm') list = list.filter((session) => session.kind === 'patient');
     if (!term) return list;
-    return list.filter((s: any) => {
-      const name = (s.displayName ?? '').toLowerCase();
+    return list.filter((session) => {
+      const name = (session.displayName ?? '').toLowerCase();
       return (
-        s.sessionId.toLowerCase().includes(term) ||
+        session.sessionId.toLowerCase().includes(term) ||
         name.includes(term) ||
-        s.lastMessagePreview.toLowerCase().includes(term)
+        session.lastMessagePreview.toLowerCase().includes(term)
       );
     });
   }, [classifiedSessions, search, tab]);

@@ -8,14 +8,66 @@ import { useAvailableDoctorsNow } from '@/hooks/useAvailableDoctorsNow';
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { usePatientData } from '@/hooks/usePatientData';
+import { webhookRequest } from '@/lib/webhookClient';
 import { MedicalRecordsList } from '@/components/patients/MedicalRecordsList';
 import { Mic, MicOff, FileText } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
+type MediaCaptureRefs = {
+  micStream: MediaStream;
+  displayStream: MediaStream | null;
+  audioContext: AudioContext;
+  processor: ScriptProcessorNode;
+  micSource: MediaStreamAudioSourceNode;
+  micGain: GainNode;
+  tabSource: MediaStreamAudioSourceNode | null;
+  tabGain: GainNode | null;
+};
+
+type FinalizedTranscriptResponse =
+  | {
+      output?: string;
+      summary?: string;
+      resumo?: string;
+      chief_complaint?: string;
+      queixa_principal?: string;
+      diagnosis?: string;
+      diagnostico?: string;
+      treatment_plan?: string;
+      plano_tratamento?: string;
+    }
+  | Array<{
+      output?: string;
+      summary?: string;
+      resumo?: string;
+      chief_complaint?: string;
+      queixa_principal?: string;
+      diagnosis?: string;
+      diagnostico?: string;
+      treatment_plan?: string;
+      plano_tratamento?: string;
+    }>;
+
+type UpcomingTeleconsultation = {
+  id: string;
+  start_time?: string | null;
+  appointments?: {
+    patient_id?: string | null;
+    scheduled_at?: string | null;
+    patients?: {
+      name?: string | null;
+      phone?: string | null;
+    } | null;
+    doctor_profile?: {
+      name?: string | null;
+    } | null;
+  } | null;
+};
+
 // Hook para transcrição com AssemblyAI
 const useAssemblyAITranscription = () => {
   const wsRef = useRef<WebSocket | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaRecorderRef = useRef<MediaCaptureRefs | null>(null);
   const fullTranscriptRef = useRef<string>(''); // Mantém transcrição completa acumulada
   const lastPartialRef = useRef<string>(''); // Mantém última transcrição parcial
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -26,16 +78,15 @@ const useAssemblyAITranscription = () => {
     try {
       // Primeiro, obtenha um token temporário do seu backend
       // Você deve criar este endpoint para proteger sua API key
-      const tokenResponse = await fetch('https://webhook.n8nlabz.com.br/webhook/assemblyai-token', {
+      const tokenResponse = await webhookRequest<{ token: string }>('/assemblyai-token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: {
           teleconsultationId,
-          purpose: 'teleconsulta'
-        })
+          purpose: 'teleconsulta',
+        },
       });
       
-      const { token } = await tokenResponse.json();
+      const { token } = tokenResponse;
       
       // Conecta ao WebSocket da AssemblyAI (v3) com MESMOS parâmetros do playground
       const wsUrl = new URL('wss://streaming.assemblyai.com/v3/ws');
@@ -155,7 +206,7 @@ const useAssemblyAITranscription = () => {
           micGain, 
           tabSource, 
           tabGain 
-        } as any;
+        };
       };
       
       wsRef.current.onopen = async () => {
@@ -238,7 +289,7 @@ const useAssemblyAITranscription = () => {
     
     // Para a gravação (agora usamos WebAudio + múltiplas fontes)
     if (mediaRecorderRef.current) {
-      const refs = mediaRecorderRef.current as any;
+      const refs = mediaRecorderRef.current;
       try {
         if (refs.processor) {
           refs.processor.disconnect();
@@ -255,12 +306,16 @@ const useAssemblyAITranscription = () => {
         if (refs.tabSource) {
           refs.tabSource.disconnect();
         }
-      } catch {}
+      } catch (cleanupError) {
+        console.error('Falha ao liberar nos de audio', cleanupError);
+      }
       try {
         if (refs.audioContext) {
           await refs.audioContext.close();
         }
-      } catch {}
+      } catch (cleanupError) {
+        console.error('Falha ao fechar contexto de audio', cleanupError);
+      }
       try {
         if (refs.micStream) {
           refs.micStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
@@ -268,7 +323,9 @@ const useAssemblyAITranscription = () => {
         if (refs.displayStream) {
           refs.displayStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         }
-      } catch {}
+      } catch (cleanupError) {
+        console.error('Falha ao encerrar streams de captura', cleanupError);
+      }
     }
     
     // Fecha WebSocket
@@ -295,24 +352,15 @@ const useAssemblyAITranscription = () => {
         
         console.log('Payload:', payload);
         
-        const response = await fetch('https://webhook.n8nlabz.com.br/webhook/finalizar-transcricao', {
+        const result = await webhookRequest<FinalizedTranscriptResponse>('/finalizar-transcricao', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: payload,
         });
-        
-        if (response.ok) {
-          console.log('✅ Transcrição completa enviada com sucesso');
-          
-          // Recebe o resumo retornado pelo webhook
-          const result = await response.json();
-          console.log('📋 Resumo recebido:', result);
-          
-          return result; // Retorna o resumo para ser processado
-        } else {
-          console.error('❌ Erro ao enviar transcrição:', response.status, response.statusText);
-          return null;
-        }
+
+        console.log('✅ Transcrição completa enviada com sucesso');
+        console.log('📋 Resumo recebido:', result);
+
+        return result; // Retorna o resumo para ser processado
       } catch (error) {
         console.error('❌ Erro ao enviar transcrição completa:', error);
         return null;
@@ -337,7 +385,7 @@ const useAssemblyAITranscription = () => {
 export default function Teleconsulta() {
   const { user } = useAuth(); // Pega o usuário autenticado
   const { availableDoctors, loading: loadingDoctors, error: errorDoctors } = useAvailableDoctorsNow();
-  const [upcoming, setUpcoming] = useState<any[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingTeleconsultation[]>([]);
   const [loadingUpcoming, setLoadingUpcoming] = useState<boolean>(false);
   const [errorUpcoming, setErrorUpcoming] = useState<string | null>(null);
 
@@ -404,20 +452,20 @@ export default function Teleconsulta() {
           .from('teleconsultations')
           .select(
             `id, appointment_id, start_time, end_time, status, meeting_url,
-             appointments!inner(id, scheduled_at, patient_id, doctor_id,
+             appointments!inner(id, appointment_date, patient_id, doctor_id,
                patients:patient_id(name, phone),
                doctor_profile:doctor_id(name)
              )`
           )
           .eq('status', 'scheduled')
-          .gte('appointments.scheduled_at', nowIso)
-          .order('scheduled_at', { ascending: true, foreignTable: 'appointments' })
+          .gte('appointments.appointment_date', nowIso)
+          .order('appointment_date', { ascending: true, foreignTable: 'appointments' })
           .limit(8);
 
         if (error) throw error;
         setUpcoming(data || []);
-      } catch (e: any) {
-        setErrorUpcoming(e?.message ?? 'Erro ao carregar próximas teleconsultas');
+      } catch (e: unknown) {
+        setErrorUpcoming(e instanceof Error ? e.message : 'Erro ao carregar próximas teleconsultas');
       } finally {
         setLoadingUpcoming(false);
       }
@@ -496,7 +544,7 @@ export default function Teleconsulta() {
           ) : (
             <div className="space-y-3">
               {upcoming.map((t) => {
-                const appt = (t as any).appointments;
+                const appt = t.appointments;
                 const when = appt?.scheduled_at ? new Date(appt.scheduled_at) : (t.start_time ? new Date(t.start_time) : null);
                 const patientName = appt?.patients?.name || 'Paciente';
                 const patientPhone = appt?.patients?.phone || null;
@@ -585,15 +633,14 @@ export default function Teleconsulta() {
                       .from('teleconsultations')
                       .update({ meeting_url: pendingInvite.urlPatient })
                       .eq('id', pendingInvite.teleconsultationId);
-                    await fetch('https://webhook.n8nlabz.com.br/webhook/enviar-link', {
+                    await webhookRequest('/enviar-link', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
+                      body: {
                         paciente_nome: pendingInvite.patientName,
                         paciente_telefone: pendingInvite.patientPhone,
                         url_participacao: pendingInvite.urlPatient,
                         medico_nome: pendingInvite.doctorName,
-                      }),
+                      },
                     });
                     setEmbedUrl(pendingInvite.urlDoctor);
                     setActivePatientId(pendingInvite.patientId || null);
@@ -775,3 +822,4 @@ export default function Teleconsulta() {
     </DashboardLayout>
   );
 }
+
