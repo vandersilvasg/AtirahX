@@ -7,10 +7,10 @@ Cole no Claude Code/Claude Desktop com acesso ao repositorio local.
 Atue como arquiteto + implementador full-stack.
 Implemente o dashboard completo do SaaS de clinicas com base nos arquivos abaixo:
 
-- docs/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
-- docs/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
-- docs/telas/12_TELAS_V1_INDEX.md
-- docs/telas/13_TELA_PACIENTES_V1.md ate docs/telas/21_TELA_ACESSO_RBAC_V1.md
+- AtirahX/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
+- AtirahX/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
+- AtirahX/telas/12_TELAS_V1_INDEX.md
+- AtirahX/telas/13_TELA_PACIENTES_V1.md ate AtirahX/telas/21_TELA_ACESSO_RBAC_V1.md
 
 Instrucoes:
 1. Leia os docs primeiro e gere um plano de implementacao em etapas.

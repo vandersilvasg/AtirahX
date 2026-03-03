@@ -7,18 +7,18 @@ Cole o prompt abaixo no Cursor Agent dentro do repositorio `Sistema OS`.
 Voce e um engenheiro senior e vai implementar o dashboard completo do SaaS de clinicas.
 
 Contexto (arquivos obrigatorios):
-- docs/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
-- docs/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
-- docs/telas/12_TELAS_V1_INDEX.md
-- docs/telas/13_TELA_PACIENTES_V1.md
-- docs/telas/14_TELA_RELATORIOS_V1.md
-- docs/telas/15_TELA_CONFIGURACOES_V1.md
-- docs/telas/16_TELA_AGENDA_V1.md
-- docs/telas/17_TELA_KANBAN_CRM_V1.md
-- docs/telas/18_TELA_MENSAGENS_V1.md
-- docs/telas/19_TELA_EQUIPE_V1.md
-- docs/telas/20_TELA_FINANCEIRO_V1.md
-- docs/telas/21_TELA_ACESSO_RBAC_V1.md
+- AtirahX/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
+- AtirahX/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
+- AtirahX/telas/12_TELAS_V1_INDEX.md
+- AtirahX/telas/13_TELA_PACIENTES_V1.md
+- AtirahX/telas/14_TELA_RELATORIOS_V1.md
+- AtirahX/telas/15_TELA_CONFIGURACOES_V1.md
+- AtirahX/telas/16_TELA_AGENDA_V1.md
+- AtirahX/telas/17_TELA_KANBAN_CRM_V1.md
+- AtirahX/telas/18_TELA_MENSAGENS_V1.md
+- AtirahX/telas/19_TELA_EQUIPE_V1.md
+- AtirahX/telas/20_TELA_FINANCEIRO_V1.md
+- AtirahX/telas/21_TELA_ACESSO_RBAC_V1.md
 
 Objetivo:
 Implementar um dashboard e as telas operacionais V1 com foco em:

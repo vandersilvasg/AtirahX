@@ -4,9 +4,9 @@
 Crie e implemente o dashboard V1 do SaaS de clinicas.
 
 Referencias:
-- docs/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
-- docs/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
-- docs/telas/13_TELA_PACIENTES_V1.md ate docs/telas/21_TELA_ACESSO_RBAC_V1.md
+- AtirahX/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
+- AtirahX/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
+- AtirahX/telas/13_TELA_PACIENTES_V1.md ate AtirahX/telas/21_TELA_ACESSO_RBAC_V1.md
 
 Escopo minimo:
 - Dashboard gestor (KPIs + G01 G02 G04 G05 G06)

@@ -4,9 +4,9 @@
 Implemente o dashboard V1 e as telas principais do SaaS de clinicas com base nos docs do projeto.
 
 Leia:
-- docs/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
-- docs/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
-- docs/telas/13_TELA_PACIENTES_V1.md ate docs/telas/21_TELA_ACESSO_RBAC_V1.md
+- AtirahX/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
+- AtirahX/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
+- AtirahX/telas/13_TELA_PACIENTES_V1.md ate AtirahX/telas/21_TELA_ACESSO_RBAC_V1.md
 
 Prioridade de entrega:
 Agenda -> Kanban CRM -> Pacientes -> Mensagens -> RBAC -> Dashboard -> Relatorios.

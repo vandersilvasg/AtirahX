@@ -7,11 +7,11 @@ Use como prompt de execucao no fluxo agentic do Antigravity.
 Objetivo: construir dashboard V1 completo para SaaS de clinicas, com foco em operacao e gestao.
 
 Leia e aplique como especificacao:
-- docs/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
-- docs/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
-- docs/telas/12_TELAS_V1_INDEX.md
-- docs/telas/13_TELA_PACIENTES_V1.md ate docs/telas/21_TELA_ACESSO_RBAC_V1.md
-- docs/planejamento/23_BACKLOG_TECNICO_SPRINTS_EXECUCAO_V1.md
+- AtirahX/dashboard/11_DASHBOARD_BLUEPRINT_V1_GESTAO_CLINICAS.md
+- AtirahX/dashboard/11_DASHBOARD_GRAFICOS_KPIS_V1.csv
+- AtirahX/telas/12_TELAS_V1_INDEX.md
+- AtirahX/telas/13_TELA_PACIENTES_V1.md ate AtirahX/telas/21_TELA_ACESSO_RBAC_V1.md
+- AtirahX/planejamento/23_BACKLOG_TECNICO_SPRINTS_EXECUCAO_V1.md
 
 Plano de execucao:
 Fase A) Foundation UI
