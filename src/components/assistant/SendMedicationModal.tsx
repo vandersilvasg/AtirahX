@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2, Send, FileText, Edit3 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { webhookRequest } from '@/lib/webhookClient';
 
 interface SendMedicationModalProps {
   open: boolean;
@@ -55,25 +55,15 @@ export function SendMedicationModal({
     setError(null);
 
     try {
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/enviar-medicacao`, {
+      const result = await webhookRequest<unknown>('/enviar-medicacao', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           texto: messageToSend,
           nome_paciente: patientName,
           numero_paciente: patientPhone,
           medicamento: medicationName,
-        }),
+        },
       });
-
-      if (!response.ok) {
-        throw new Error(`Erro ao enviar mensagem: ${response.status}`);
-      }
-
-      const result = await response.json();
       console.log('Resposta do envio:', result);
 
       toast.success('Mensagem enviada com sucesso!');
@@ -221,4 +211,3 @@ export function SendMedicationModal({
     </Dialog>
   );
 }
-

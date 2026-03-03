@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
-// Interface para a estrutura horizontal do banco (1 linha por médico)
+// Interface para a estrutura horizontal do banco (1 linha por mÃ©dico)
 export interface DoctorScheduleDB {
   id?: string;
   doctor_id: string;
   appointment_duration: number;
+  [key: string]: string | number | boolean | null | undefined;
   
   // Segunda-feira
   seg_inicio?: string;
@@ -14,7 +15,7 @@ export interface DoctorScheduleDB {
   seg_fim?: string;
   seg_ativo?: boolean;
   
-  // Terça-feira
+  // TerÃ§a-feira
   ter_inicio?: string;
   ter_pausa_inicio?: string;
   ter_pausa_fim?: string;
@@ -42,7 +43,7 @@ export interface DoctorScheduleDB {
   sex_fim?: string;
   sex_ativo?: boolean;
   
-  // Sábado
+  // SÃ¡bado
   sab_inicio?: string;
   sab_pausa_inicio?: string;
   sab_pausa_fim?: string;
@@ -79,12 +80,21 @@ export interface DoctorSchedule {
 const DAY_PREFIXES: Record<number, string> = {
   0: 'dom', // Domingo
   1: 'seg', // Segunda
-  2: 'ter', // Terça
+  2: 'ter', // TerÃ§a
   3: 'qua', // Quarta
   4: 'qui', // Quinta
   5: 'sex', // Sexta
-  6: 'sab', // Sábado
+  6: 'sab', // SÃ¡bado
 };
+
+const asString = (value: string | number | boolean | null | undefined): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+const asBoolean = (value: string | number | boolean | null | undefined): boolean =>
+  typeof value === 'boolean' ? value : false;
+
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback;
 
 /**
  * Converte da estrutura horizontal do banco (1 linha) para vertical (array de 7 dias)
@@ -102,12 +112,12 @@ function dbToSchedules(dbData: DoctorScheduleDB | null): DoctorSchedule[] {
       id: dbData.id,
       doctor_id: dbData.doctor_id,
       day_of_week: dayOfWeek,
-      start_time: (dbData as any)[`${prefix}_inicio`] || '08:00',
-      end_time: (dbData as any)[`${prefix}_fim`] || '18:00',
+      start_time: asString(dbData[`${prefix}_inicio`]) || '08:00',
+      end_time: asString(dbData[`${prefix}_fim`]) || '18:00',
       appointment_duration: dbData.appointment_duration || 30,
-      break_start_time: (dbData as any)[`${prefix}_pausa_inicio`] || undefined,
-      break_end_time: (dbData as any)[`${prefix}_pausa_fim`] || undefined,
-      is_active: (dbData as any)[`${prefix}_ativo`] || false,
+      break_start_time: asString(dbData[`${prefix}_pausa_inicio`]) || undefined,
+      break_end_time: asString(dbData[`${prefix}_pausa_fim`]) || undefined,
+      is_active: asBoolean(dbData[`${prefix}_ativo`]),
       created_at: dbData.created_at,
       updated_at: dbData.updated_at,
     });
@@ -129,11 +139,11 @@ function schedulesToDb(schedules: Record<number, DoctorSchedule>, doctorId: stri
   Object.entries(schedules).forEach(([dayOfWeek, schedule]) => {
     const prefix = DAY_PREFIXES[parseInt(dayOfWeek)];
     
-    (dbData as any)[`${prefix}_inicio`] = schedule.start_time || null;
-    (dbData as any)[`${prefix}_pausa_inicio`] = schedule.break_start_time || null;
-    (dbData as any)[`${prefix}_pausa_fim`] = schedule.break_end_time || null;
-    (dbData as any)[`${prefix}_fim`] = schedule.end_time || null;
-    (dbData as any)[`${prefix}_ativo`] = schedule.is_active || false;
+    dbData[`${prefix}_inicio`] = schedule.start_time || null;
+    dbData[`${prefix}_pausa_inicio`] = schedule.break_start_time || null;
+    dbData[`${prefix}_pausa_fim`] = schedule.break_end_time || null;
+    dbData[`${prefix}_fim`] = schedule.end_time || null;
+    dbData[`${prefix}_ativo`] = schedule.is_active || false;
   });
   
   return dbData;
@@ -144,8 +154,8 @@ export function useDoctorSchedule(doctorId: string) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Busca os horários do médico (1 linha no banco, convertida para array de 7 dias)
-  const fetchSchedules = async () => {
+  // Busca os horÃ¡rios do mÃ©dico (1 linha no banco, convertida para array de 7 dias)
+  const fetchSchedules = useCallback(async () => {
     if (!doctorId) return;
 
     setLoading(true);
@@ -163,23 +173,23 @@ export function useDoctorSchedule(doctorId: string) {
       // Converte de horizontal (banco) para vertical (componente)
       const schedulesArray = dbToSchedules(data);
       setSchedules(schedulesArray);
-    } catch (err: any) {
-      console.error('Erro ao buscar horários:', err);
-      setError(err.message || 'Erro ao buscar horários');
+    } catch (err: unknown) {
+      console.error('Erro ao buscar horÃ¡rios:', err);
+      setError(getErrorMessage(err, 'Erro ao buscar horÃ¡rios'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [doctorId]);
 
-  // Salva TODOS os horários de uma vez (UPSERT na única linha do médico)
+  // Salva TODOS os horÃ¡rios de uma vez (UPSERT na Ãºnica linha do mÃ©dico)
   const saveSchedule = async (schedule: DoctorSchedule) => {
-    // Esta função ainda recebe um schedule individual por compatibilidade,
-    // mas na prática devemos usar saveAllSchedules
-    console.warn('saveSchedule está deprecated, use saveAllSchedules');
+    // Esta funÃ§Ã£o ainda recebe um schedule individual por compatibilidade,
+    // mas na prÃ¡tica devemos usar saveAllSchedules
+    console.warn('saveSchedule estÃ¡ deprecated, use saveAllSchedules');
     throw new Error('Use saveAllSchedules para salvar todos os dias de uma vez');
   };
 
-  // Salva TODOS os horários de uma vez (função nova)
+  // Salva TODOS os horÃ¡rios de uma vez (funÃ§Ã£o nova)
   const saveAllSchedules = async (schedulesMap: Record<number, DoctorSchedule>) => {
     setLoading(true);
     setError(null);
@@ -188,29 +198,29 @@ export function useDoctorSchedule(doctorId: string) {
       // Converte de vertical (array) para horizontal (objeto do banco)
       const dbData = schedulesToDb(schedulesMap, doctorId);
 
-      // UPSERT: Insere se não existe, atualiza se já existe
+      // UPSERT: Insere se nÃ£o existe, atualiza se jÃ¡ existe
       // Baseado na constraint UNIQUE(doctor_id)
       const { error: upsertError } = await supabase
         .from('doctor_schedules')
         .upsert(dbData, {
           onConflict: 'doctor_id', // Identifica conflitos por doctor_id
-          ignoreDuplicates: false, // Não ignora, faz UPDATE
+          ignoreDuplicates: false, // NÃ£o ignora, faz UPDATE
         });
 
       if (upsertError) throw upsertError;
 
       // Recarrega os dados do banco
       await fetchSchedules();
-    } catch (err: any) {
-      console.error('Erro ao salvar horários:', err);
-      setError(err.message || 'Erro ao salvar horários');
+    } catch (err: unknown) {
+      console.error('Erro ao salvar horÃ¡rios:', err);
+      setError(getErrorMessage(err, 'Erro ao salvar horÃ¡rios'));
       throw err;
     } finally {
       setLoading(false);
     }
   };
 
-  // Deleta o registro completo do médico
+  // Deleta o registro completo do mÃ©dico
   const deleteSchedule = async (scheduleId: string) => {
     setLoading(true);
     setError(null);
@@ -225,9 +235,9 @@ export function useDoctorSchedule(doctorId: string) {
 
       // Limpa o estado local
       setSchedules([]);
-    } catch (err: any) {
-      console.error('Erro ao deletar horário:', err);
-      setError(err.message || 'Erro ao deletar horário');
+    } catch (err: unknown) {
+      console.error('Erro ao deletar horÃ¡rio:', err);
+      setError(getErrorMessage(err, 'Erro ao deletar horÃ¡rio'));
       throw err;
     } finally {
       setLoading(false);
@@ -236,16 +246,16 @@ export function useDoctorSchedule(doctorId: string) {
 
   // Toggle ativo/inativo (deprecated - use saveAllSchedules)
   const toggleScheduleActive = async (scheduleId: string, isActive: boolean) => {
-    console.warn('toggleScheduleActive está deprecated, use saveAllSchedules');
+    console.warn('toggleScheduleActive estÃ¡ deprecated, use saveAllSchedules');
     throw new Error('Use saveAllSchedules para atualizar o status');
   };
 
-  // Carrega os horários ao montar o componente
+  // Carrega os horÃ¡rios ao montar o componente
   useEffect(() => {
     if (doctorId) {
       fetchSchedules();
     }
-  }, [doctorId]);
+  }, [doctorId, fetchSchedules]);
 
   return {
     schedules,
@@ -253,8 +263,9 @@ export function useDoctorSchedule(doctorId: string) {
     error,
     fetchSchedules,
     saveSchedule, // Deprecated
-    saveAllSchedules, // Nova função principal
+    saveAllSchedules, // Nova funÃ§Ã£o principal
     deleteSchedule,
     toggleScheduleActive, // Deprecated
   };
 }
+

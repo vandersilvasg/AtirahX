@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { SendMedicationModal } from './SendMedicationModal';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { webhookRequest } from '@/lib/webhookClient';
 
 interface AgentMedicationModalProps {
   open: boolean;
@@ -70,7 +70,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<MedicationData | null>(null);
   
-  // Estados para vinculação com paciente
+  // Estados para vinculaÃ§Ã£o com paciente
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [showPatientSelect, setShowPatientSelect] = useState(false);
@@ -102,7 +102,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
     }
 
     if (!viaAdministracao) {
-      setError('Por favor, selecione a via de administração');
+      setError('Por favor, selecione a via de administraÃ§Ã£o');
       return;
     }
 
@@ -111,35 +111,23 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
     setResultado(null);
 
     try {
-      // Construir array de condições especiais
+      // Construir array de condiÃ§Ãµes especiais
       const condicoesEspeciais: string[] = [];
       if (condicaoRenal) condicoesEspeciais.push('problema_renal');
       if (condicaoHepatica) condicoesEspeciais.push('problema_hepatico');
       if (gestante) condicoesEspeciais.push('gestante');
       if (lactante) condicoesEspeciais.push('lactante');
 
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/agent-calc-medicacao`, {
+      const rawData = await webhookRequest<unknown>('/agent-calc-medicacao', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           medicamento: medicamento.trim(),
           idade: parseInt(idade),
           peso: parseFloat(peso),
           via_administracao: viaAdministracao,
           condicoes_especiais: condicoesEspeciais,
-        }),
+        },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Erro HTTP:', response.status, errorText);
-        throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
-      }
-
-      const rawData = await response.json();
       console.log('Resposta bruta da API:', rawData);
       
       // A API pode retornar em diferentes formatos:
@@ -158,42 +146,42 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
           medicationData = JSON.parse(dataWithOutput.output);
           console.log('Dados parseados com sucesso:', medicationData);
         } else if (rawData.sucesso !== undefined) {
-          // Se já vier no formato esperado (sem output)
-          console.log('Resposta já no formato de objeto direto');
+          // Se jÃ¡ vier no formato esperado (sem output)
+          console.log('Resposta jÃ¡ no formato de objeto direto');
           medicationData = rawData;
         } else if (Array.isArray(rawData) && rawData[0]?.sucesso !== undefined) {
           // Se vier como array de objetos diretos
           console.log('Resposta como array de objetos');
           medicationData = rawData[0];
         } else {
-          console.error('Formato de resposta não reconhecido:', rawData);
-          throw new Error('Formato de resposta da API não reconhecido. Verifique o console para mais detalhes.');
+          console.error('Formato de resposta nÃ£o reconhecido:', rawData);
+          throw new Error('Formato de resposta da API nÃ£o reconhecido. Verifique o console para mais detalhes.');
         }
       } catch (parseError) {
         console.error('Erro ao processar resposta:', parseError, 'Dados brutos:', rawData);
         throw new Error('Erro ao processar resposta do servidor. Verifique o console para detalhes.');
       }
       
-      // Verificar se o cálculo foi bem-sucedido
+      // Verificar se o cÃ¡lculo foi bem-sucedido
       if (medicationData.sucesso === false) {
-        const errorMessage = medicationData.observacoes || 'Não foi possível calcular a dosagem para este medicamento';
+        const errorMessage = medicationData.observacoes || 'NÃ£o foi possÃ­vel calcular a dosagem para este medicamento';
         console.error('API retornou sucesso=false:', errorMessage);
         throw new Error(errorMessage);
       }
       
-      // Validar campos obrigatórios
+      // Validar campos obrigatÃ³rios
       if (!medicationData.medicamento || !medicationData.dose_calculada) {
-        console.error('Resposta da API está incompleta:', medicationData);
-        throw new Error('A resposta da API está incompleta. Faltam campos obrigatórios.');
+        console.error('Resposta da API estÃ¡ incompleta:', medicationData);
+        throw new Error('A resposta da API estÃ¡ incompleta. Faltam campos obrigatÃ³rios.');
       }
       
-      console.log('✅ Dados validados e prontos para exibição:', medicationData);
+      console.log('âœ… Dados validados e prontos para exibiÃ§Ã£o:', medicationData);
       setResultado(medicationData);
     } catch (err) {
-      console.error('Erro ao calcular medicação:', err);
+      console.error('Erro ao calcular medicaÃ§Ã£o:', err);
       
       // Extrair mensagem de erro mais detalhada
-      let errorMessage = 'Erro ao calcular dosagem de medicação. Tente novamente.';
+      let errorMessage = 'Erro ao calcular dosagem de medicaÃ§Ã£o. Tente novamente.';
       
       if (err instanceof Error) {
         errorMessage = err.message;
@@ -256,11 +244,11 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
           throw error;
         }
 
-        console.log(`✅ ${data?.length || 0} paciente(s) carregado(s):`, data);
+        console.log(`âœ… ${data?.length || 0} paciente(s) carregado(s):`, data);
         setPatients(data || []);
 
         if (!data || data.length === 0) {
-          console.warn('⚠️ Nenhum paciente encontrado no banco de dados');
+          console.warn('âš ï¸ Nenhum paciente encontrado no banco de dados');
           toast.info('Nenhum paciente cadastrado. Cadastre um paciente primeiro.');
         }
       } catch (err) {
@@ -271,7 +259,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
     loadPatients();
   }, [open]);
 
-  // Função para vincular cálculo ao paciente
+  // FunÃ§Ã£o para vincular cÃ¡lculo ao paciente
   const handleVincularPaciente = async () => {
     if (!selectedPatientId) {
       toast.error('Selecione um paciente');
@@ -286,7 +274,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
     setSavingToPatient(true);
 
     try {
-      // Construir array de condições especiais usadas no cálculo
+      // Construir array de condiÃ§Ãµes especiais usadas no cÃ¡lculo
       const condicoesEspeciais: string[] = [];
       if (condicaoRenal) condicoesEspeciais.push('problema_renal');
       if (condicaoHepatica) condicoesEspeciais.push('problema_hepatico');
@@ -308,7 +296,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
             condicoes_especiais: condicoesEspeciais,
           },
           consultation_output: resultado,
-          // Campos específicos para medicação
+          // Campos especÃ­ficos para medicaÃ§Ã£o
           medication_name: resultado.medicamento,
           medication_dosage: resultado.dose_calculada,
           medication_frequency: resultado.frequencia,
@@ -319,7 +307,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
         throw insertError;
       }
 
-      toast.success('Cálculo de medicação vinculado ao paciente com sucesso!');
+      toast.success('CÃ¡lculo de medicaÃ§Ã£o vinculado ao paciente com sucesso!');
       
       // Buscar dados do paciente para envio
       const patient = patients.find(p => p.id === selectedPatientId);
@@ -334,8 +322,8 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
       setShowPatientSelect(false);
       setSelectedPatientId('');
     } catch (err) {
-      console.error('Erro ao vincular cálculo:', err);
-      toast.error('Erro ao vincular cálculo ao paciente');
+      console.error('Erro ao vincular cÃ¡lculo:', err);
+      toast.error('Erro ao vincular cÃ¡lculo ao paciente');
     } finally {
       setSavingToPatient(false);
     }
@@ -351,16 +339,16 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
               <Calculator className="w-6 h-6 text-purple-500" />
             </div>
             <div>
-              <DialogTitle>Agent de Cálculo de Medicação</DialogTitle>
+              <DialogTitle>Agent de CÃ¡lculo de MedicaÃ§Ã£o</DialogTitle>
               <DialogDescription>
-                Cálculo preciso de dosagens e posologias medicamentosas
+                CÃ¡lculo preciso de dosagens e posologias medicamentosas
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
-          {/* Área com Scroll quando necessário */}
+          {/* Ãrea com Scroll quando necessÃ¡rio */}
           <div className={`overflow-y-auto overflow-x-hidden px-6 py-4 space-y-6 ${resultado ? 'flex-1' : ''}`}>
             {/* Campo de Medicamento */}
             <div className="space-y-2">
@@ -410,20 +398,20 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
               </div>
             </div>
 
-            {/* Via de Administração */}
+            {/* Via de AdministraÃ§Ã£o */}
             <div className="space-y-2">
-              <Label htmlFor="via">Via de Administração *</Label>
+              <Label htmlFor="via">Via de AdministraÃ§Ã£o *</Label>
               <Select value={viaAdministracao} onValueChange={setViaAdministracao} disabled={loading}>
                 <SelectTrigger id="via">
-                  <SelectValue placeholder="Selecione a via de administração" />
+                  <SelectValue placeholder="Selecione a via de administraÃ§Ã£o" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="oral">Oral</SelectItem>
-                  <SelectItem value="injetavel_iv">Injetável - Intravenoso (IV)</SelectItem>
-                  <SelectItem value="injetavel_im">Injetável - Intramuscular (IM)</SelectItem>
-                  <SelectItem value="injetavel_sc">Injetável - Subcutâneo (SC)</SelectItem>
-                  <SelectItem value="topico">Tópico</SelectItem>
-                  <SelectItem value="inalatoria">Inalatória</SelectItem>
+                  <SelectItem value="injetavel_iv">InjetÃ¡vel - Intravenoso (IV)</SelectItem>
+                  <SelectItem value="injetavel_im">InjetÃ¡vel - Intramuscular (IM)</SelectItem>
+                  <SelectItem value="injetavel_sc">InjetÃ¡vel - SubcutÃ¢neo (SC)</SelectItem>
+                  <SelectItem value="topico">TÃ³pico</SelectItem>
+                  <SelectItem value="inalatoria">InalatÃ³ria</SelectItem>
                   <SelectItem value="sublingual">Sublingual</SelectItem>
                   <SelectItem value="retal">Retal</SelectItem>
                   <SelectItem value="outro">Outro</SelectItem>
@@ -431,9 +419,9 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
               </Select>
             </div>
 
-            {/* Condições Especiais */}
+            {/* CondiÃ§Ãµes Especiais */}
             <div className="space-y-3">
-              <Label className="text-base">Condições Especiais</Label>
+              <Label className="text-base">CondiÃ§Ãµes Especiais</Label>
               <div className="space-y-3 p-4 rounded-lg border bg-muted/30">
                 <div className="flex items-center space-x-2">
                   <Checkbox
@@ -446,7 +434,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                     htmlFor="renal"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                   >
-                    Problema Renal (Insuficiência Renal)
+                    Problema Renal (InsuficiÃªncia Renal)
                   </label>
                 </div>
 
@@ -461,7 +449,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                     htmlFor="hepatico"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                   >
-                    Problema Hepático (Insuficiência Hepática)
+                    Problema HepÃ¡tico (InsuficiÃªncia HepÃ¡tica)
                   </label>
                 </div>
 
@@ -496,7 +484,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Marque as condições especiais que se aplicam ao paciente
+                Marque as condiÃ§Ãµes especiais que se aplicam ao paciente
               </p>
             </div>
 
@@ -511,7 +499,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
             {/* Resultado */}
             {resultado && (
               <div className="rounded-lg border bg-gradient-to-br from-purple-500/5 to-pink-500/5 p-6 space-y-4 mb-4">
-                {/* Cabeçalho do Resultado */}
+                {/* CabeÃ§alho do Resultado */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
@@ -565,7 +553,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                     <div className="flex items-center gap-2">
                       <Info className="w-4 h-4 text-muted-foreground" />
                       <span className="text-sm font-semibold text-muted-foreground">
-                        Frequência
+                        FrequÃªncia
                       </span>
                     </div>
                     <p className="text-sm font-medium">{resultado.frequencia}</p>
@@ -575,7 +563,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                     <div className="flex items-center gap-2">
                       <Info className="w-4 h-4 text-muted-foreground" />
                       <span className="text-sm font-semibold text-muted-foreground">
-                        Via de Administração
+                        Via de AdministraÃ§Ã£o
                       </span>
                     </div>
                     <Badge variant="outline" className="text-sm">
@@ -588,7 +576,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                       <div className="flex items-center gap-2">
                         <Info className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm font-semibold text-muted-foreground">
-                          Duração do Tratamento
+                          DuraÃ§Ã£o do Tratamento
                         </span>
                       </div>
                       <p className="text-sm font-medium">{resultado.duracao_tratamento_dias} dias</p>
@@ -598,12 +586,12 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
 
                 <Separator />
 
-                {/* Dose Máxima */}
+                {/* Dose MÃ¡xima */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-orange-500" />
                     <span className="text-sm font-semibold text-muted-foreground">
-                      Dose Máxima por Dia
+                      Dose MÃ¡xima por Dia
                     </span>
                   </div>
                   <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
@@ -677,20 +665,20 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                   </>
                 )}
 
-                {/* Contraindicações */}
+                {/* ContraindicaÃ§Ãµes */}
                 {resultado.contraindicacoes && resultado.contraindicacoes.length > 0 && (
                   <>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 text-red-600" />
                         <span className="text-sm font-semibold text-muted-foreground">
-                          Contraindicações
+                          ContraindicaÃ§Ãµes
                         </span>
                       </div>
                       <div className="p-4 rounded-lg bg-red-600/10 border border-red-600/20 space-y-2">
                         {resultado.contraindicacoes.map((contraindicacao, index) => (
                           <div key={index} className="flex items-start gap-2">
-                            <span className="text-red-600 font-bold text-xs mt-0.5 flex-shrink-0">⚠</span>
+                            <span className="text-red-600 font-bold text-xs mt-0.5 flex-shrink-0">!</span>
                             <p className="text-sm leading-relaxed text-red-800 dark:text-red-300">
                               {contraindicacao}
                             </p>
@@ -702,14 +690,14 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                   </>
                 )}
 
-                {/* Categoria de Risco na Gestação */}
+                {/* Categoria de Risco na GestaÃ§Ã£o */}
                 {resultado.categoria_risco_gestacao && (
                   <>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Info className="w-4 h-4 text-muted-foreground" />
                         <span className="text-sm font-semibold text-muted-foreground">
-                          Categoria de Risco na Gestação
+                          Categoria de Risco na GestaÃ§Ã£o
                         </span>
                       </div>
                       <Badge 
@@ -727,12 +715,12 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                   </>
                 )}
 
-                {/* Observações Clínicas */}
+                {/* ObservaÃ§Ãµes ClÃ­nicas */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Info className="w-4 h-4 text-amber-500" />
                     <span className="text-sm font-semibold text-muted-foreground">
-                      Observações Clínicas
+                      ObservaÃ§Ãµes ClÃ­nicas
                     </span>
                   </div>
                   <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
@@ -742,7 +730,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                   </div>
                 </div>
 
-                {/* Seção de Vincular a Paciente */}
+                {/* SeÃ§Ã£o de Vincular a Paciente */}
                 <Separator />
                 
                 {!showPatientSelect ? (
@@ -761,7 +749,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                   <div className="space-y-4 p-4 rounded-lg bg-muted/50 border">
                     <div className="flex items-center gap-2 mb-2">
                       <Link2 className="w-4 h-4 text-primary" />
-                      <h5 className="font-semibold text-sm">Vincular ao Prontuário</h5>
+                      <h5 className="font-semibold text-sm">Vincular ao ProntuÃ¡rio</h5>
                     </div>
                     
                     <div className="space-y-2">
@@ -789,7 +777,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
-                        Este cálculo de medicação será salvo no prontuário do paciente selecionado
+                        Este cÃ¡lculo de medicaÃ§Ã£o serÃ¡ salvo no prontuÃ¡rio do paciente selecionado
                       </p>
                     </div>
 
@@ -820,7 +808,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                         ) : (
                           <>
                             <Link2 className="w-4 h-4 mr-2" />
-                            Confirmar Vinculação
+                            Confirmar VinculaÃ§Ã£o
                           </>
                         )}
                       </Button>
@@ -831,7 +819,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
             )}
           </div>
 
-          {/* Botões de Ação */}
+          {/* BotÃµes de AÃ§Ã£o */}
           <div className="flex gap-3 justify-end px-6 py-4 border-t bg-background flex-shrink-0">
             {resultado ? (
               <>
@@ -847,7 +835,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
                   onClick={handleNovoBusca}
                 >
                   <Calculator className="w-4 h-4 mr-2" />
-                  Novo Cálculo
+                  Novo CÃ¡lculo
                 </Button>
               </>
             ) : (
@@ -894,4 +882,5 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
   </>
   );
 }
+
 

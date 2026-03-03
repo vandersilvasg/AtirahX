@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Edit, Calendar, Clock, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { webhookRequest } from '@/lib/webhookClient';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +43,22 @@ interface Doctor {
   email?: string;
   calendar_id?: string;
 }
+
+type DoctorRow = {
+  id: string;
+  name: string;
+  specialization?: string | null;
+  email?: string | null;
+};
+
+type CalendarRow = {
+  profile_id: string;
+  calendar_id: string | null;
+  calendar_name?: string | null;
+};
+
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback;
 
 interface EditEventModalProps {
   open: boolean;
@@ -86,7 +102,7 @@ export function EditEventModal({
 
       if (error) throw error;
       setPatients(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao carregar pacientes:', error);
       toast.error('Erro ao carregar lista de pacientes');
     } finally {
@@ -94,7 +110,7 @@ export function EditEventModal({
     }
   };
 
-  // Carregar médicos
+  // Carregar mÃ©dicos
   const fetchDoctors = async () => {
     setLoadingDoctors(true);
     try {
@@ -111,11 +127,12 @@ export function EditEventModal({
         .select('profile_id, calendar_id, calendar_name');
 
       if (calendarsError) {
-        console.error('[EditEventModal] Erro ao buscar calendários:', calendarsError);
+        console.error('[EditEventModal] Erro ao buscar calendÃ¡rios:', calendarsError);
       }
 
-      const doctorsWithCalendar = (doctorsData || []).map((doctor: any) => {
-        const calendar = calendarsData?.find(c => c.profile_id === doctor.id);
+      const calendarRows = (calendarsData as CalendarRow[] | null) || [];
+      const doctorsWithCalendar = ((doctorsData as DoctorRow[] | null) || []).map((doctor) => {
+        const calendar = calendarRows.find((c) => c.profile_id === doctor.id);
         return {
           id: doctor.id,
           name: doctor.name,
@@ -126,9 +143,9 @@ export function EditEventModal({
       });
 
       setDoctors(doctorsWithCalendar);
-    } catch (error: any) {
-      console.error('[EditEventModal] Erro ao carregar médicos:', error);
-      toast.error('Erro ao carregar lista de médicos');
+    } catch (error: unknown) {
+      console.error('[EditEventModal] Erro ao carregar mÃ©dicos:', error);
+      toast.error('Erro ao carregar lista de mÃ©dicos');
     } finally {
       setLoadingDoctors(false);
     }
@@ -141,7 +158,7 @@ export function EditEventModal({
       fetchDoctors();
 
       // Parsear nome do paciente do appointment
-      // Como appointment.patient_id contém o nome do paciente, vamos procurar pelo nome
+      // Como appointment.patient_id contÃ©m o nome do paciente, vamos procurar pelo nome
       const patientName = appointment.patient_id;
       
       // Data e hora
@@ -155,7 +172,7 @@ export function EditEventModal({
       setEventDate(`${year}-${month}-${day}`);
       setStartTime(`${hours}:${minutes}`);
       
-      // Calcular hora final (1 hora depois por padrão)
+      // Calcular hora final (1 hora depois por padrÃ£o)
       const endDate = new Date(aptDate);
       endDate.setHours(endDate.getHours() + 1);
       const endHours = String(endDate.getHours()).padStart(2, '0');
@@ -164,7 +181,7 @@ export function EditEventModal({
 
       setNotes(appointment.notes || '');
 
-      // Buscar paciente pelo nome após carregar a lista
+      // Buscar paciente pelo nome apÃ³s carregar a lista
       setTimeout(async () => {
         const { data: patientData } = await supabase
           .from('patients')
@@ -178,12 +195,17 @@ export function EditEventModal({
         }
       }, 500);
 
-      // Buscar médico pelo calendar_id
+      // Buscar mÃ©dico pelo calendar_id
       if (appointment.doctor_id) {
-        setTimeout(() => {
-          const doctor = doctors.find(d => d.calendar_id === appointment.doctor_id);
-          if (doctor) {
-            setSelectedDoctorId(doctor.id);
+        setTimeout(async () => {
+          const { data: calendarData } = await supabase
+            .from('profile_calendars')
+            .select('profile_id')
+            .eq('calendar_id', appointment.doctor_id)
+            .maybeSingle();
+
+          if (calendarData?.profile_id) {
+            setSelectedDoctorId(calendarData.profile_id);
           }
         }, 500);
       }
@@ -203,13 +225,13 @@ export function EditEventModal({
   const handleUpdateEvent = async () => {
     if (!appointment) return;
 
-    // Validações
+    // ValidaÃ§Ãµes
     if (!selectedPatientId) {
       toast.error('Selecione um paciente');
       return;
     }
     if (!selectedDoctorId) {
-      toast.error('Selecione um médico');
+      toast.error('Selecione um mÃ©dico');
       return;
     }
     if (!eventDate) {
@@ -217,11 +239,11 @@ export function EditEventModal({
       return;
     }
     if (!startTime) {
-      toast.error('Selecione o horário inicial');
+      toast.error('Selecione o horÃ¡rio inicial');
       return;
     }
     if (!endTime) {
-      toast.error('Selecione o horário final');
+      toast.error('Selecione o horÃ¡rio final');
       return;
     }
 
@@ -230,11 +252,11 @@ export function EditEventModal({
       const patient = patients.find(p => p.id === selectedPatientId);
       const doctor = doctors.find(d => d.id === selectedDoctorId);
 
-      if (!patient) throw new Error('Paciente não encontrado');
-      if (!doctor) throw new Error('Médico não encontrado');
+      if (!patient) throw new Error('Paciente nÃ£o encontrado');
+      if (!doctor) throw new Error('MÃ©dico nÃ£o encontrado');
 
       if (!doctor.calendar_id) {
-        toast.error('Este médico não possui agenda vinculada');
+        toast.error('Este mÃ©dico nÃ£o possui agenda vinculada');
         setLoading(false);
         return;
       }
@@ -262,29 +284,18 @@ export function EditEventModal({
       console.log('Calendar ID (Agenda):', doctor.calendar_id);
       console.log('Payload completo:', payload);
 
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/editar-evento`, {
+      const data = await webhookRequest<unknown>('/editar-evento', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        body: payload,
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao atualizar evento: ${response.statusText}. ${errorText}`);
-      }
-
-      const data = await response.json();
       console.log('[EditEvent] Resposta do endpoint:', data);
 
       toast.success('Evento atualizado com sucesso!');
       onEventUpdated?.();
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao atualizar evento:', error);
-      toast.error('Erro ao atualizar evento: ' + error.message);
+      toast.error('Erro ao atualizar evento: ' + getErrorMessage(error, 'falha inesperada'));
     } finally {
       setLoading(false);
     }
@@ -303,30 +314,19 @@ export function EditEventModal({
 
       console.log('[DeleteEvent] Enviando dados para deletar evento:', payload);
 
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/deletar-evento`, {
+      const data = await webhookRequest<unknown>('/apagar-evento', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        body: payload,
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao deletar evento: ${response.statusText}. ${errorText}`);
-      }
-
-      const data = await response.json();
       console.log('[DeleteEvent] Resposta do endpoint:', data);
 
       toast.success('Evento deletado com sucesso!');
       onEventDeleted?.();
       onOpenChange(false);
       setShowDeleteDialog(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao deletar evento:', error);
-      toast.error('Erro ao deletar evento: ' + error.message);
+      toast.error('Erro ao deletar evento: ' + getErrorMessage(error, 'falha inesperada'));
     } finally {
       setLoading(false);
     }
@@ -347,12 +347,12 @@ export function EditEventModal({
               Editar Evento
             </DialogTitle>
             <DialogDescription>
-              Atualize as informações do evento na agenda
+              Atualize as informaÃ§Ãµes do evento na agenda
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            {/* Seleção de Paciente */}
+            {/* SeleÃ§Ã£o de Paciente */}
             <div className="space-y-2">
               <Label htmlFor="patient">Paciente *</Label>
               <Select value={selectedPatientId} onValueChange={setSelectedPatientId}>
@@ -383,13 +383,13 @@ export function EditEventModal({
               </Select>
             </div>
 
-            {/* Seleção de Médico */}
+            {/* SeleÃ§Ã£o de MÃ©dico */}
             <div className="space-y-2">
-              <Label htmlFor="doctor">Médico *</Label>
+              <Label htmlFor="doctor">MÃ©dico *</Label>
               <Select value={selectedDoctorId} onValueChange={setSelectedDoctorId}>
                 <SelectTrigger id="doctor" disabled={loadingDoctors}>
                   <SelectValue
-                    placeholder={loadingDoctors ? "Carregando médicos..." : "Selecione um médico"}
+                    placeholder={loadingDoctors ? "Carregando mÃ©dicos..." : "Selecione um mÃ©dico"}
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -418,7 +418,7 @@ export function EditEventModal({
                   ))}
                   {!loadingDoctors && doctors.length === 0 && (
                     <SelectItem value="empty" disabled>
-                      Nenhum médico cadastrado
+                      Nenhum mÃ©dico cadastrado
                     </SelectItem>
                   )}
                 </SelectContent>
@@ -436,7 +436,7 @@ export function EditEventModal({
                   <SelectItem value="primeira_consulta">Primeira Consulta</SelectItem>
                   <SelectItem value="retorno">Retorno</SelectItem>
                   <SelectItem value="procedimento">Procedimento</SelectItem>
-                  <SelectItem value="avaliacao">Avaliação</SelectItem>
+                  <SelectItem value="avaliacao">AvaliaÃ§Ã£o</SelectItem>
                   <SelectItem value="teleconsulta">Teleconsulta</SelectItem>
                   <SelectItem value="outro">Outro</SelectItem>
                 </SelectContent>
@@ -454,12 +454,12 @@ export function EditEventModal({
               />
             </div>
 
-            {/* Horários */}
+            {/* HorÃ¡rios */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="startTime" className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  Horário Inicial *
+                  HorÃ¡rio Inicial *
                 </Label>
                 <Input
                   id="startTime"
@@ -471,7 +471,7 @@ export function EditEventModal({
               <div className="space-y-2">
                 <Label htmlFor="endTime" className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  Horário Final *
+                  HorÃ¡rio Final *
                 </Label>
                 <Input
                   id="endTime"
@@ -484,12 +484,12 @@ export function EditEventModal({
 
             {/* Notas */}
             <div className="space-y-2">
-              <Label htmlFor="notes">Observações</Label>
+              <Label htmlFor="notes">ObservaÃ§Ãµes</Label>
               <Textarea
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Informações adicionais..."
+                placeholder="InformaÃ§Ãµes adicionais..."
                 rows={3}
               />
             </div>
@@ -516,7 +516,7 @@ export function EditEventModal({
                     Salvando...
                   </>
                 ) : (
-                  'Salvar Alterações'
+                  'Salvar AlteraÃ§Ãµes'
                 )}
               </Button>
             </div>
@@ -524,13 +524,13 @@ export function EditEventModal({
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de confirmação de exclusão */}
+      {/* Dialog de confirmaÃ§Ã£o de exclusÃ£o */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar ExclusÃ£o</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja deletar este evento? Esta ação não pode ser desfeita.
+              Tem certeza que deseja deletar este evento? Esta aÃ§Ã£o nÃ£o pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

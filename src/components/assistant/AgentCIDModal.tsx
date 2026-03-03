@@ -23,7 +23,7 @@ import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { webhookRequest } from '@/lib/webhookClient';
 
 interface AgentCIDModalProps {
   open: boolean;
@@ -86,24 +86,14 @@ export function AgentCIDModal({ open, onOpenChange }: AgentCIDModalProps) {
     setResultado(null);
 
     try {
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/agent-cid`, {
+      const data: CIDResponse = await webhookRequest('/agent-cid', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           termo: termo.trim(),
           idade: parseInt(idade),
           sexo: sexo,
-        }),
+        },
       });
-
-      if (!response.ok) {
-        throw new Error(`Erro na requisição: ${response.status} ${response.statusText}`);
-      }
-
-      const data: CIDResponse = await response.json();
       
       // Parsear o campo output que vem como string JSON
       try {

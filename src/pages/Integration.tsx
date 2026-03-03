@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,19 +9,83 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, RefreshCw, AlertCircle, CheckCircle2, Plug, User, Calendar, Clock, Phone, Play, Power, Edit } from 'lucide-react';
 import { toast } from 'sonner';
-import { getApiBaseUrl } from '@/lib/apiConfig';
+import { webhookRequest } from '@/lib/webhookClient';
+
+interface InstanceStatus {
+  connected?: boolean;
+  jid?: string;
+  loggedIn?: boolean;
+}
 
 interface Instance {
   id?: string;
-  status?: string;
+  status?: string | InstanceStatus;
   name?: string;
   profileName?: string;
   profilePicUrl?: string;
   owner?: string;
   created?: string;
   currentTime?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
+
+type InstancesListResponse = {
+  instances?: Instance[];
+  data?: Instance[] | Instance;
+} & Instance;
+
+type ConnectInstanceResponse = {
+  instance?: {
+    paircode?: string;
+  };
+};
+
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const normalizeInstance = (value: unknown): Instance => {
+  if (!isObjectRecord(value)) return {};
+  const nestedInstance = isObjectRecord(value.instance) ? value.instance : {};
+
+  return {
+    id: (value.id as string) || (value.instanceId as string) || (nestedInstance.instanceId as string),
+    name: (value.name as string) || (value.instanceName as string) || (nestedInstance.instanceName as string) || 'N/A',
+    profileName:
+      (value.profileName as string) ||
+      (nestedInstance.profileName as string) ||
+      (value.systemName as string) ||
+      'Sem nome',
+    profilePicUrl:
+      (value.profilePicUrl as string) ||
+      (nestedInstance.profilePicUrl as string) ||
+      (value.profilePictureUrl as string),
+    status: (value.status as string | InstanceStatus) || (nestedInstance.status as string | InstanceStatus) || (value.connectionStatus as string),
+    owner: (value.owner as string) || (nestedInstance.owner as string) || (value.number as string),
+    created: (value.created as string) || (nestedInstance.created as string) || (value.createdAt as string),
+    currentTime: (value.currentTime as string) || (value.updatedAt as string) || (value.lastSeen as string),
+    ...value,
+  };
+};
+
+// Helper para extrair status como string
+const getStatusString = (status: string | InstanceStatus | undefined): string => {
+  if (!status) return 'unknown';
+  if (typeof status === 'string') return status;
+  // Se for objeto, verifica se estÃ¡ conectado
+  if (typeof status === 'object') {
+    if (status.connected || status.loggedIn) return 'connected';
+    return 'disconnected';
+  }
+  return 'unknown';
+};
+
+// Helper para verificar se estÃ¡ conectado
+const isConnected = (status: string | InstanceStatus | undefined): boolean => {
+  if (!status) return false;
+  if (typeof status === 'string') return status === 'connected';
+  if (typeof status === 'object') return !!(status.connected || status.loggedIn);
+  return false;
+};
 
 export default function Integration() {
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -70,39 +134,35 @@ export default function Integration() {
     setError(null);
     
     try {
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/listar-instancias`, {
+      const data = await webhookRequest<unknown>('/listar-instancias', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
+        body: {},
       });
       
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar instâncias: ${response.status}`);
-      }
+      console.log('[Integration] Dados brutos recebidos:', JSON.stringify(data, null, 2));
       
-      const data = await response.json();
+      // Normaliza os dados para o formato esperado
+      let instancesList: Instance[] = [];
       
-      // Se a resposta for um array, usa diretamente, senão tenta acessar uma propriedade comum
       if (Array.isArray(data)) {
-        setInstances(data);
-      } else if (data.instances) {
-        setInstances(data.instances);
-      } else if (data.data) {
-        setInstances(data.data);
+        instancesList = data.map(normalizeInstance);
+      } else if (isObjectRecord(data) && Array.isArray((data as InstancesListResponse).instances)) {
+        instancesList = ((data as InstancesListResponse).instances ?? []).map(normalizeInstance);
+      } else if (isObjectRecord(data) && (data as InstancesListResponse).data) {
+        const rawData = (data as InstancesListResponse).data;
+        instancesList = (Array.isArray(rawData) ? rawData : [rawData]).map(normalizeInstance);
       } else {
-        // Se for um objeto único, coloca em um array
-        setInstances([data]);
+        instancesList = [normalizeInstance(data)];
       }
+      console.log('[Integration] InstÃ¢ncias normalizadas:', instancesList);
+      setInstances(instancesList);
       
-      toast.success('Instâncias carregadas com sucesso!');
+      toast.success('InstÃ¢ncias carregadas com sucesso!');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       setError(errorMessage);
-      toast.error(`Erro ao carregar instâncias: ${errorMessage}`);
-      console.error('Erro ao buscar instâncias:', err);
+      toast.error(`Erro ao carregar instÃ¢ncias: ${errorMessage}`);
+      console.error('Erro ao buscar instÃ¢ncias:', err);
     } finally {
       setLoading(false);
     }
@@ -120,53 +180,43 @@ export default function Integration() {
 
   const checkConnectionStatus = async (instanceName: string) => {
     try {
-      console.log('🔍 Verificando status da instância:', instanceName);
+      console.log('ðŸ” Verificando status da instÃ¢ncia:', instanceName);
       
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/listar-instancias`, {
+      const data = await webhookRequest<unknown>('/listar-instancias', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
+        body: {},
       });
+      console.log('ðŸ“¦ Dados recebidos:', data);
+      console.log('ðŸ“‹ Tipo dos dados:', Array.isArray(data) ? 'Array' : 'Objeto');
       
-      if (!response.ok) {
-        throw new Error(`Erro ao verificar status: ${response.status}`);
-      }
+      let foundItem: Instance | null = null;
       
-      const data = await response.json();
-      console.log('📦 Dados recebidos:', data);
-      console.log('📋 Tipo dos dados:', Array.isArray(data) ? 'Array' : 'Objeto');
-      
-      let foundItem = null;
-      
-      // Procura a instância - pode ser array [{...}] ou objeto direto {...}
+      // Procura a instÃ¢ncia - pode ser array [{...}] ou objeto direto {...}
       if (Array.isArray(data)) {
-        console.log('🔎 Buscando instância no ARRAY com nome:', instanceName);
-        foundItem = data.find((item: any) => {
+        console.log('ðŸ”Ž Buscando instÃ¢ncia no ARRAY com nome:', instanceName);
+        foundItem = data.map(normalizeInstance).find((item) => {
           console.log('  - Verificando item:', item.name, '===', instanceName, '?', item.name === instanceName);
           return item.name === instanceName;
-        });
-      } else if (data && typeof data === 'object') {
-        console.log('🔎 Verificando OBJETO direto com nome:', data.name);
+        }) ?? null;
+      } else if (isObjectRecord(data)) {
+        console.log('ðŸ”Ž Verificando OBJETO direto com nome:', data.name);
         // Se for um objeto direto, verifica se o nome bate
         if (data.name === instanceName) {
-          foundItem = data;
-          console.log('✅ Nome bate!');
+          foundItem = normalizeInstance(data);
+          console.log('âœ… Nome bate!');
         } else {
-          console.log('❌ Nome não bate:', data.name, '!==', instanceName);
+          console.log('âŒ Nome nÃ£o bate:', data.name, '!==', instanceName);
         }
       }
       
-      console.log('✅ Instância encontrada:', foundItem);
+      console.log('âœ… InstÃ¢ncia encontrada:', foundItem);
       
-      // Verifica se a instância está conectada
+      // Verifica se a instÃ¢ncia estÃ¡ conectada
       if (foundItem) {
-        console.log('📊 Status atual:', foundItem.status);
+        console.log('ðŸ“Š Status atual:', foundItem.status);
         
-        if (foundItem.status === 'connected') {
-          console.log('🎉 Status CONNECTED detectado! Fechando modal...');
+        if (isConnected(foundItem.status)) {
+          console.log('ðŸŽ‰ Status CONNECTED detectado! Fechando modal...');
           
           // Parar polling
           if (pollingInterval) {
@@ -175,7 +225,7 @@ export default function Integration() {
           }
           
           // Mostrar sucesso e fechar modal
-          toast.success('✅ Instância conectada com sucesso!');
+          toast.success('âœ… InstÃ¢ncia conectada com sucesso!');
           setConnectModal({ 
             open: false, 
             instanceName: '', 
@@ -189,10 +239,10 @@ export default function Integration() {
           
           return true;
         } else {
-          console.log('⏳ Status ainda é:', foundItem.status, '- Aguardando...');
+          console.log('â³ Status ainda Ã©:', foundItem.status, '- Aguardando...');
         }
       } else {
-        console.log('❌ Instância não encontrada');
+        console.log('âŒ InstÃ¢ncia nÃ£o encontrada');
       }
       
       return false;
@@ -204,35 +254,25 @@ export default function Integration() {
 
   const handleConnect = async () => {
     if (!connectModal.instanceName.trim()) {
-      toast.error('Por favor, insira o nome da instância');
+      toast.error('Por favor, insira o nome da instÃ¢ncia');
       return;
     }
 
     if (!connectModal.phoneNumber.trim()) {
-      toast.error('Por favor, insira o número de telefone');
+      toast.error('Por favor, insira o nÃºmero de telefone');
       return;
     }
 
     setActionLoading(prev => ({ ...prev, [`connect-${connectModal.instanceName}`]: true }));
     
     try {
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/conectar-instancia`, {
+      const data = await webhookRequest<ConnectInstanceResponse[] | ConnectInstanceResponse>('/conectar-instancia', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
+        body: {
           name: connectModal.instanceName.trim(),
           phoneNumber: connectModal.phoneNumber.trim(),
-        }),
+        },
       });
-      
-      if (!response.ok) {
-        throw new Error(`Erro ao conectar instância: ${response.status}`);
-      }
-      
-      const data = await response.json();
       
       // Extrair paircode da resposta do endpoint /conectar-instancia
       // Estrutura: [{instance: {paircode: "5YE9-GA45"}}]
@@ -251,7 +291,7 @@ export default function Integration() {
           isWaitingConnection: true,
         }));
         
-        toast.success('Código de pareamento gerado! Aguardando conexão...');
+        toast.success('CÃ³digo de pareamento gerado! Aguardando conexÃ£o...');
         
         // Iniciar polling a cada 2 segundos
         const interval = setInterval(() => {
@@ -260,12 +300,12 @@ export default function Integration() {
         
         setPollingInterval(interval);
       } else {
-        toast.error('Não foi possível obter o código de pareamento');
+        toast.error('NÃ£o foi possÃ­vel obter o cÃ³digo de pareamento');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       toast.error(`Erro ao conectar: ${errorMessage}`);
-      console.error('Erro ao conectar instância:', err);
+      console.error('Erro ao conectar instÃ¢ncia:', err);
     } finally {
       setActionLoading(prev => ({ ...prev, [`connect-${connectModal.instanceName}`]: false }));
     }
@@ -275,25 +315,16 @@ export default function Integration() {
     setActionLoading(prev => ({ ...prev, [`disconnect-${instanceName}`]: true }));
     
     try {
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/desconectar-instancias`, {
+      await webhookRequest('/desconectar-instancias', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: instanceName }),
+        body: { name: instanceName },
       });
-      
-      if (!response.ok) {
-        throw new Error(`Erro ao desconectar instância: ${response.status}`);
-      }
-      
-      toast.success('Instância desconectada com sucesso!');
+      toast.success('InstÃ¢ncia desconectada com sucesso!');
       await fetchInstances(); // Atualiza a lista
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       toast.error(`Erro ao desconectar: ${errorMessage}`);
-      console.error('Erro ao desconectar instância:', err);
+      console.error('Erro ao desconectar instÃ¢ncia:', err);
     } finally {
       setActionLoading(prev => ({ ...prev, [`disconnect-${instanceName}`]: false }));
     }
@@ -301,31 +332,22 @@ export default function Integration() {
 
   const handleUpdateName = async () => {
     if (!newName.trim()) {
-      toast.error('Por favor, insira um nome válido');
+      toast.error('Por favor, insira um nome vÃ¡lido');
       return;
     }
 
     setActionLoading(prev => ({ ...prev, [`update-${editNameModal.instanceId}`]: true }));
     
     try {
-      const apiBaseUrl = await getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/atualizar-nome-instancia`, {
+      await webhookRequest('/atualizar-nome-instancia', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
+        body: {
           instanceId: editNameModal.instanceId,
           currentName: editNameModal.currentName,
           newName: newName.trim(),
-        }),
+        },
       });
-      
-      if (!response.ok) {
-        throw new Error(`Erro ao atualizar nome: ${response.status}`);
-      }
-      
-      toast.success('Nome da instância atualizado com sucesso!');
+      toast.success('Nome da instÃ¢ncia atualizado com sucesso!');
       setEditNameModal({ open: false, instanceId: '', currentName: '' });
       setNewName('');
       await fetchInstances(); // Atualiza a lista
@@ -374,11 +396,11 @@ export default function Integration() {
                   <Plug className="w-6 h-6 text-primary" />
                 </div>
                 <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                  Integração WhatsApp
+                  IntegraÃ§Ã£o WhatsApp
                 </h1>
               </div>
               <p className="text-muted-foreground ml-14">
-                Gerencie e monitore suas instâncias do WhatsApp conectadas
+                Gerencie e monitore suas instÃ¢ncias do WhatsApp conectadas
               </p>
             </div>
             <Button 
@@ -440,7 +462,7 @@ export default function Integration() {
                   <Loader2 className="w-12 h-12 animate-spin text-primary relative z-10" />
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-semibold">Carregando instâncias...</p>
+                  <p className="text-lg font-semibold">Carregando instÃ¢ncias...</p>
                   <p className="text-sm text-muted-foreground">Aguarde enquanto buscamos os dados</p>
                 </div>
               </div>
@@ -464,16 +486,16 @@ export default function Integration() {
                   {instance.status && (
                     <div className="absolute top-4 right-4">
                       <Badge 
-                        variant={instance.status === 'connected' ? 'default' : 'secondary'}
+                        variant={isConnected(instance.status) ? 'default' : 'secondary'}
                         className={`
                           shrink-0 px-3 py-1 shadow-md
-                          ${instance.status === 'connected' ? 'bg-green-500 hover:bg-green-600' : ''}
+                          ${isConnected(instance.status) ? 'bg-green-500 hover:bg-green-600' : ''}
                         `}
                       >
-                        {instance.status === 'connected' && (
+                        {isConnected(instance.status) && (
                           <CheckCircle2 className="w-3 h-3 mr-1" />
                         )}
-                        {instance.status}
+                        {getStatusString(instance.status)}
                       </Badge>
                     </div>
                   )}
@@ -487,7 +509,7 @@ export default function Integration() {
                           <User className="w-8 h-8 text-primary" />
                         </AvatarFallback>
                       </Avatar>
-                      {instance.status === 'connected' && (
+                      {isConnected(instance.status) && (
                         <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-background animate-pulse" />
                       )}
                     </div>
@@ -513,13 +535,13 @@ export default function Integration() {
                         <Phone className="w-4 h-4 text-primary" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Proprietário</p>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">ProprietÃ¡rio</p>
                         <p className="text-sm font-semibold text-foreground">{instance.owner}</p>
                       </div>
                     </div>
                   )}
                   
-                  {/* Criação */}
+                  {/* CriaÃ§Ã£o */}
                   {instance.created && (
                     <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                       <div className="p-2 rounded-lg bg-blue-500/10">
@@ -532,14 +554,14 @@ export default function Integration() {
                     </div>
                   )}
                   
-                  {/* Última Atualização */}
+                  {/* Ãšltima AtualizaÃ§Ã£o */}
                   {instance.currentTime && (
                     <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                       <div className="p-2 rounded-lg bg-purple-500/10">
                         <Clock className="w-4 h-4 text-purple-500" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Última atualização</p>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ãšltima atualizaÃ§Ã£o</p>
                         <p className="text-sm font-semibold text-foreground">{formatDate(instance.currentTime)}</p>
                       </div>
                     </div>
@@ -548,15 +570,15 @@ export default function Integration() {
                   {/* Divider */}
                   <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent my-4" />
 
-                  {/* Botões de Ação */}
+                  {/* BotÃµes de AÃ§Ã£o */}
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
-                      {/* Botão Conectar */}
+                      {/* BotÃ£o Conectar */}
                       <Button
-                        variant={instance.status === 'connected' ? 'secondary' : 'default'}
+                        variant={isConnected(instance.status) ? 'secondary' : 'default'}
                         size="sm"
                         className="w-full gap-2"
-                        disabled={instance.status === 'connected' || actionLoading[`connect-${instance.name}`]}
+                        disabled={isConnected(instance.status) || actionLoading[`connect-${instance.name}`]}
                         onClick={() => instance.name && openConnectModal(instance.name)}
                       >
                         {actionLoading[`connect-${instance.name}`] ? (
@@ -567,12 +589,12 @@ export default function Integration() {
                         Conectar
                       </Button>
 
-                      {/* Botão Desconectar */}
+                      {/* BotÃ£o Desconectar */}
                       <Button
-                        variant={instance.status !== 'connected' ? 'secondary' : 'destructive'}
+                        variant={!isConnected(instance.status) ? 'secondary' : 'destructive'}
                         size="sm"
                         className="w-full gap-2"
-                        disabled={instance.status !== 'connected' || actionLoading[`disconnect-${instance.name}`]}
+                        disabled={!isConnected(instance.status) || actionLoading[`disconnect-${instance.name}`]}
                         onClick={() => instance.name && handleDisconnect(instance.name)}
                       >
                         {actionLoading[`disconnect-${instance.name}`] ? (
@@ -584,7 +606,7 @@ export default function Integration() {
                       </Button>
                     </div>
 
-                    {/* Botão Atualizar Nome */}
+                    {/* BotÃ£o Atualizar Nome */}
                     <Button
                       variant="outline"
                       size="sm"
@@ -592,7 +614,7 @@ export default function Integration() {
                       onClick={() => instance.id && openEditNameModal(instance.id, instance.name || '')}
                     >
                       <Edit className="w-4 h-4" />
-                      Atualizar nome da Instância
+                      Atualizar nome da InstÃ¢ncia
                     </Button>
                   </div>
                 </CardContent>
@@ -613,9 +635,9 @@ export default function Integration() {
                   <Plug className="w-16 h-16 text-muted-foreground" />
                 </div>
                 <div className="space-y-2">
-                  <p className="text-xl font-bold">Nenhuma instância encontrada</p>
+                  <p className="text-xl font-bold">Nenhuma instÃ¢ncia encontrada</p>
                   <p className="text-sm text-muted-foreground max-w-md">
-                    Não há instâncias do WhatsApp disponíveis no momento. Tente atualizar ou verifique sua conexão.
+                    NÃ£o hÃ¡ instÃ¢ncias do WhatsApp disponÃ­veis no momento. Tente atualizar ou verifique sua conexÃ£o.
                   </p>
                 </div>
                 <Button 
@@ -633,7 +655,7 @@ export default function Integration() {
         )}
       </div>
 
-      {/* Dialog para conectar instância */}
+      {/* Dialog para conectar instÃ¢ncia */}
       <Dialog open={connectModal.open} onOpenChange={(open) => {
         if (!open) {
           if (pollingInterval) {
@@ -653,26 +675,26 @@ export default function Integration() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Play className="w-5 h-5 text-primary" />
-              {connectModal.isWaitingConnection ? 'Aguardando Conexão' : 'Conectar Instância WhatsApp'}
+              {connectModal.isWaitingConnection ? 'Aguardando ConexÃ£o' : 'Conectar InstÃ¢ncia WhatsApp'}
             </DialogTitle>
             <DialogDescription>
               {connectModal.isWaitingConnection 
-                ? 'Utilize o código abaixo para parear sua instância do WhatsApp' 
-                : 'Informe o nome da instância e o número de telefone para conectar.'}
+                ? 'Utilize o cÃ³digo abaixo para parear sua instÃ¢ncia do WhatsApp' 
+                : 'Informe o nome da instÃ¢ncia e o nÃºmero de telefone para conectar.'}
             </DialogDescription>
           </DialogHeader>
           
           {!connectModal.isWaitingConnection ? (
-            // Formulário inicial
+            // FormulÃ¡rio inicial
             <>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="instanceName" className="text-sm font-medium">
-                    Nome da Instância
+                    Nome da InstÃ¢ncia
                   </Label>
                   <Input
                     id="instanceName"
-                    placeholder="Digite o nome da instância"
+                    placeholder="Digite o nome da instÃ¢ncia"
                     value={connectModal.instanceName}
                     onChange={(e) => setConnectModal(prev => ({ ...prev, instanceName: e.target.value }))}
                     className="col-span-3"
@@ -680,12 +702,12 @@ export default function Integration() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="phoneNumber" className="text-sm font-medium">
-                    Número de Telefone
+                    NÃºmero de Telefone
                   </Label>
                   <Input
                     id="phoneNumber"
                     type="tel"
-                    placeholder="Digite o número de telefone (ex: 5511999999999)"
+                    placeholder="Digite o nÃºmero de telefone (ex: 5511999999999)"
                     value={connectModal.phoneNumber}
                     onChange={(e) => setConnectModal(prev => ({ ...prev, phoneNumber: e.target.value }))}
                     onKeyDown={(e) => {
@@ -740,7 +762,7 @@ export default function Integration() {
             // Tela de aguardando com paircode
             <>
               <div className="py-6 space-y-6">
-                {/* Código de Pareamento */}
+                {/* CÃ³digo de Pareamento */}
                 <div className="flex flex-col items-center justify-center gap-4">
                   <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border-2 border-primary/20 shadow-lg">
                     <p className="text-5xl font-bold tracking-wider text-primary font-mono">
@@ -749,10 +771,10 @@ export default function Integration() {
                   </div>
                   <div className="text-center space-y-2">
                     <p className="text-sm font-medium text-muted-foreground">
-                      Código de Pareamento
+                      CÃ³digo de Pareamento
                     </p>
                     <p className="text-xs text-muted-foreground max-w-md">
-                      Abra o WhatsApp no seu celular, vá em <strong>Aparelhos conectados</strong> e insira o código acima
+                      Abra o WhatsApp no seu celular, vÃ¡ em <strong>Aparelhos conectados</strong> e insira o cÃ³digo acima
                     </p>
                   </div>
                 </div>
@@ -762,7 +784,7 @@ export default function Integration() {
                   <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
                   <div className="flex-1 text-center">
                     <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                      Aguardando conexão...
+                      Aguardando conexÃ£o...
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Verificando status a cada 2 segundos
@@ -796,7 +818,7 @@ export default function Integration() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para editar nome da instância */}
+      {/* Dialog para editar nome da instÃ¢ncia */}
       <Dialog open={editNameModal.open} onOpenChange={(open) => {
         if (!open) {
           setEditNameModal({ open: false, instanceId: '', currentName: '' });
@@ -807,10 +829,10 @@ export default function Integration() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="w-5 h-5 text-primary" />
-              Atualizar Nome da Instância
+              Atualizar Nome da InstÃ¢ncia
             </DialogTitle>
             <DialogDescription>
-              Digite o novo nome para a instância. O nome atual é: <strong>{editNameModal.currentName}</strong>
+              Digite o novo nome para a instÃ¢ncia. O nome atual Ã©: <strong>{editNameModal.currentName}</strong>
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -820,7 +842,7 @@ export default function Integration() {
               </Label>
               <Input
                 id="name"
-                placeholder="Digite o novo nome da instância"
+                placeholder="Digite o novo nome da instÃ¢ncia"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
