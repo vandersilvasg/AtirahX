@@ -1,0 +1,37 @@
+id,Task Name,List Name,Status,Priority,Tags,Story Points,Dependencies,Description,Custom Field: Sprint,Custom Field: Commitment
+TB-031,Criar design system V1 compartilhado,Sprint 1 - Core Operacional,to do,high,"cross,frontend,design-system",8,None,"Componentes base para filtros cards tabelas drawers e estados.",Sprint 1,Committed
+TB-004,Modelar consultas de agenda por medico dia semana,Sprint 1 - Core Operacional,to do,urgent,"agenda,data,sql",8,None,"Consultas e indices para visao dia semana e lista.",Sprint 1,Committed
+TB-005,Integrar RPCs de agendamento e status no backend,Sprint 1 - Core Operacional,to do,urgent,"agenda,backend,rpc",8,TB-004,"Fluxos criar confirmar alterar status com validacao de transicao.",Sprint 1,Committed
+TB-006,Implementar tela agenda com drawer operacional,Sprint 1 - Core Operacional,to do,urgent,"agenda,frontend,ui",8,TB-005,"Calendario por medico com acoes operacionais e teleconsulta.",Sprint 1,Committed
+TB-010,Otimizar busca e deduplicacao de pacientes,Sprint 1 - Core Operacional,to do,high,"patients,data,sql",5,None,"Busca por nome telefone documento e deduplicacao por tenant.",Sprint 1,Committed
+TB-011,APIs de cadastro merge e timeline de paciente,Sprint 1 - Core Operacional,to do,high,"patients,backend,api",8,TB-010,"CRUD de pacientes com timeline e merge controlado.",Sprint 1,Committed
+TB-012,Implementar tela pacientes com filtros e drawer,Sprint 1 - Core Operacional,to do,high,"patients,frontend,ui",8,TB-011,"Lista com filtros avancados e painel contextual.",Sprint 1,Committed
+TB-019,Consolidar matriz de permissao por recurso e role,Sprint 1 - Core Operacional,to do,urgent,"rbac,data,security",8,None,"Estrutura canonica de permissoes alinhada ao backend.",Sprint 1,Committed
+TB-020,Endpoints admin para roles politicas e sessao,Sprint 1 - Core Operacional,to do,urgent,"rbac,backend,security",8,TB-019,"Troca de role revogacao de sessao e auditoria.",Sprint 1,Committed
+TB-007,Criar visao de funil CRM com SLA de lead,Sprint 2 - CRM e Mensagens,to do,high,"crm,data,sql",5,None,"Visao por etapa canal e tempo medio de resposta.",Sprint 2,Committed
+TB-008,APIs de movimentacao de etapa e conversao lead paciente,Sprint 2 - CRM e Mensagens,to do,high,"crm,backend,api",8,TB-007,"Persistir mudanca de etapa e conversao com auditoria.",Sprint 2,Committed
+TB-009,Implementar board kanban CRM com drag and drop,Sprint 2 - CRM e Mensagens,to do,high,"crm,frontend,ui",8,TB-008,"Board com score ultima interacao e proxima acao.",Sprint 2,Committed
+TB-013,Estruturar fila de mensagens com idempotencia,Sprint 2 - CRM e Mensagens,to do,high,"messages,data,events",8,None,"Fila de mensagens com retry e estado de entrega.",Sprint 2,Committed
+TB-014,Servico omnichannel com fallback de canal,Sprint 2 - CRM e Mensagens,to do,high,"messages,backend,integrations",8,TB-013,"Envio WhatsApp e email com fallback.",Sprint 2,Committed
+TB-015,Implementar inbox de mensagens e templates,Sprint 2 - CRM e Mensagens,to do,high,"messages,frontend,ui",8,TB-014,"Inbox operacional com timeline e templates.",Sprint 2,Committed
+TB-021,Implementar tela de acesso RBAC e auditoria,Sprint 2 - CRM e Mensagens,to do,high,"rbac,frontend,ui",8,TB-020,"Matriz visual de acesso e logs.",Sprint 2,Committed
+TB-035,Testes de permissao por role e tenant,Sprint 2 - CRM e Mensagens,to do,urgent,"cross,qa,security",8,TB-021,"Garantir bloqueio de acesso indevido em UI API e banco.",Sprint 2,Committed
+TB-001,Criar views vw_dash para KPIs e graficos V1,Sprint 3 - Gestao e Relatorios,to do,high,"dashboard,data,sql",8,None,"Views agregadas para KPIs e graficos do dashboard.",Sprint 3,Committed
+TB-002,Implementar endpoints agregados de dashboard com cache,Sprint 3 - Gestao e Relatorios,to do,high,"dashboard,backend,api",8,TB-001,"Endpoints com filtros globais e cache.",Sprint 3,Committed
+TB-003,Construir tela dashboard gestor V1,Sprint 3 - Gestao e Relatorios,to do,high,"dashboard,frontend,ui",8,TB-002,"KPIs e graficos com drill-down.",Sprint 3,Committed
+TB-022,Criar views de relatorios operacionais e comerciais,Sprint 3 - Gestao e Relatorios,to do,high,"reports,data,sql",8,TB-001,"Views de comparecimento no-show ocupacao e conversao.",Sprint 3,Committed
+TB-023,Endpoints de relatorios com exportacao,Sprint 3 - Gestao e Relatorios,to do,high,"reports,backend,api",5,TB-022,"APIs para consulta e exportacao.",Sprint 3,Committed
+TB-024,Implementar tela relatorios com drill down,Sprint 3 - Gestao e Relatorios,to do,high,"reports,frontend,ui",8,TB-023,"Graficos com detalhe filtrado.",Sprint 3,Committed
+TB-033,Adicionar auditoria de exportacoes e acoes sensiveis,Sprint 3 - Gestao e Relatorios,to do,high,"cross,data,audit",5,None,"Auditar exportacoes e operacoes sensiveis.",Sprint 3,Committed
+TB-034,Suite e2e de fluxos criticos operacionais,Sprint 3 - Gestao e Relatorios,to do,high,"cross,qa,e2e",8,"TB-006;TB-009;TB-015","Cobrir agenda CRM mensagens com cenarios de erro.",Sprint 3,Committed
+TB-036,Teste de performance inicial dashboard e agenda,Sprint 3 - Gestao e Relatorios,to do,normal,"cross,qa,performance",5,"TB-003;TB-006","Medir latencia de carga e consultas pesadas.",Sprint 3,Committed
+TB-016,Ajustar entidades de equipe e vinculo profile doctor,Post-MVP,to do,normal,"team,data,sql",5,None,"Modelagem de equipe para ciclo seguinte.",Post-MVP,Deferred
+TB-017,APIs de convite ativacao e capacidade operacional,Post-MVP,to do,normal,"team,backend,api",5,TB-016,"Convite e capacidade para ciclo seguinte.",Post-MVP,Deferred
+TB-018,Implementar tela equipe com filtros por role,Post-MVP,to do,normal,"team,frontend,ui",5,TB-017,"Tela equipe para ciclo seguinte.",Post-MVP,Deferred
+TB-025,Modelar receita prevista realizada e inadimplencia,Post-MVP,to do,high,"financial,data,sql",8,None,"Base financeira para ciclo seguinte.",Post-MVP,Deferred
+TB-026,APIs de fechamento ajustes e recebimento,Post-MVP,to do,high,"financial,backend,api",5,TB-025,"Fluxos financeiros para ciclo seguinte.",Post-MVP,Deferred
+TB-027,Implementar tela financeiro V1,Post-MVP,to do,high,"financial,frontend,ui",8,TB-026,"Tela financeiro para ciclo seguinte.",Post-MVP,Deferred
+TB-028,Parametrizar regras de agenda LGPD e templates,Post-MVP,to do,normal,"settings,data,sql",5,None,"Parametros por tenant para ciclo seguinte.",Post-MVP,Deferred
+TB-029,Endpoints de configuracao versionada por tenant,Post-MVP,to do,normal,"settings,backend,api",5,TB-028,"APIs de configuracao para ciclo seguinte.",Post-MVP,Deferred
+TB-030,Implementar tela configuracoes por secao,Post-MVP,to do,normal,"settings,frontend,ui",5,TB-029,"Tela configuracoes para ciclo seguinte.",Post-MVP,Deferred
+TB-032,Instrumentar telemetria de uso por widget e tela,Post-MVP,to do,normal,"cross,backend,analytics",5,None,"Telemetria de uso para ciclo seguinte.",Post-MVP,Deferred

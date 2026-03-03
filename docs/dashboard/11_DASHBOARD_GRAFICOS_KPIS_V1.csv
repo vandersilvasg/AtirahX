@@ -1,0 +1,11 @@
+id,chart_name,chart_type,business_question,formula,grain,default_window,drill_down_target,priority
+G01,Comparecimento diario,Linha,Estamos melhorando presenca?,"concluidos/(concluidos+no_show+cancelado_tardio)",day,30d,appointments_by_day,high
+G02,No-show diario,Linha,O risco esta aumentando?,"no_show/consultas_agendadas_validas",day,30d,appointments_no_show,high
+G03,No-show por medico,Barras,Qual medico precisa de suporte?,"no_show_rate_por_doctor",doctor,30d,no_show_by_doctor_slots,medium
+G04,Ocupacao por medico,Barras horizontais,Agenda esta subutilizada?,"minutos_ocupados/minutos_disponiveis",doctor,30d,free_slots_by_doctor,high
+G05,Receita prevista vs realizada,Combo barra e linha,Vamos bater meta?,"sum(valor_previsto) vs sum(valor_recebido)",week,30d,revenue_details,high
+G06,Funil por canal,Funnel ou empilhado,Qual canal converte melhor?,"lead->agendado->confirmado->concluido",channel,30d,leads_by_stage_channel,high
+G07,Tempo medio de resposta ao lead,Linha,Atendimento comercial esta rapido?,"avg(primeiro_contato - lead_created_at)",day,30d,leads_out_of_sla,medium
+G08,Reagendamento por motivo,Barras empilhadas,O que gera atrito?,"count(reagendamentos) por motivo",reason,30d,reschedules_detail,low
+G09,Teleconsulta compliance,Donut + tabela,Fluxo remoto esta completo?,"%com_link + %com_consentimento",status,30d,teleconsult_pending_items,medium
+G10,Receita prevista 30 dias,Area,Qual previsao de caixa?,"sum(valor_previsto_consultas_futuras)",day,30d,forecast_by_doctor_channel,medium
