@@ -21,6 +21,16 @@ export const ALL_ALLOWED_TYPES = [
   ...ALLOWED_MEDICAL_TYPES,
 ];
 
+type ListedFile = Record<string, unknown>;
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 /**
  * Valida o tipo de arquivo
  */
@@ -88,7 +98,7 @@ export async function uploadFile(
     const filePath = buildFilePath(patientId, folder, uniqueFileName);
 
     // Upload para o Supabase Storage
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(filePath, file, {
         cacheControl: '3600',
@@ -105,20 +115,29 @@ export async function uploadFile(
     }
 
     // Obter URL pública (signed URL por 1 ano)
-    const { data: urlData } = await supabase.storage
+    const { data: urlData, error: urlError } = await supabase.storage
       .from(BUCKET_NAME)
       .createSignedUrl(filePath, 31536000); // 1 ano em segundos
+
+    if (urlError) {
+      console.error('Erro ao criar signed URL:', urlError);
+      return {
+        path: '',
+        url: '',
+        error: urlError.message,
+      };
+    }
 
     return {
       path: filePath,
       url: urlData?.signedUrl || '',
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro no upload:', error);
     return {
       path: '',
       url: '',
-      error: error.message || 'Erro desconhecido no upload',
+      error: getErrorMessage(error, 'Erro desconhecido no upload'),
     };
   }
 }
@@ -139,12 +158,12 @@ export async function uploadPatientAvatar(
 
     // Upload do novo avatar
     return await uploadFile(file, patientId, 'avatar');
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro no upload do avatar:', error);
     return {
       path: '',
       url: '',
-      error: error.message || 'Erro ao fazer upload do avatar',
+      error: getErrorMessage(error, 'Erro ao fazer upload do avatar'),
     };
   }
 }
@@ -159,6 +178,14 @@ export async function uploadDoctorAvatar(
   oldAvatarUrl?: string
 ): Promise<{ path: string; url: string; error?: string }> {
   try {
+    if (!doctorId || !doctorId.trim()) {
+      return {
+        path: '',
+        url: '',
+        error: 'Identificador do perfil invalido para upload da foto',
+      };
+    }
+
     // Validar tipo de arquivo
     if (!validateFileType(file, ALLOWED_IMAGE_TYPES)) {
       return {
@@ -187,7 +214,7 @@ export async function uploadDoctorAvatar(
     const filePath = `doctors/${doctorId}/avatar/${uniqueFileName}`;
 
     // Upload para o Supabase Storage
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(filePath, file, {
         cacheControl: '3600',
@@ -204,20 +231,29 @@ export async function uploadDoctorAvatar(
     }
 
     // Obter URL pública (signed URL por 1 ano)
-    const { data: urlData } = await supabase.storage
+    const { data: urlData, error: urlError } = await supabase.storage
       .from(BUCKET_NAME)
       .createSignedUrl(filePath, 31536000); // 1 ano em segundos
+
+    if (urlError) {
+      console.error('Erro ao criar signed URL do avatar:', urlError);
+      return {
+        path: '',
+        url: '',
+        error: urlError.message,
+      };
+    }
 
     return {
       path: filePath,
       url: urlData?.signedUrl || '',
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro no upload do avatar do médico:', error);
     return {
       path: '',
       url: '',
-      error: error.message || 'Erro ao fazer upload do avatar',
+      error: getErrorMessage(error, 'Erro ao fazer upload do avatar'),
     };
   }
 }
@@ -294,9 +330,9 @@ export async function deleteFile(filePath: string): Promise<{ success: boolean; 
     }
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro ao deletar arquivo:', error);
-    return { success: false, error: error.message || 'Erro desconhecido ao deletar' };
+    return { success: false, error: getErrorMessage(error, 'Erro desconhecido ao deletar') };
   }
 }
 
@@ -307,17 +343,17 @@ export async function deleteFileByUrl(url: string): Promise<{ success: boolean; 
   try {
     // Extrair o path da URL
     const urlObj = new URL(url);
-    const pathMatch = urlObj.pathname.match(/\/object\/public\/medical-files\/(.+?)(\?|$)/);
+    const pathMatch = urlObj.pathname.match(/\/object\/(?:public|sign)\/medical-files\/(.+?)(\?|$)/);
     
     if (!pathMatch) {
       return { success: false, error: 'URL inválida' };
     }
 
-    const filePath = pathMatch[1];
+    const filePath = decodeURIComponent(pathMatch[1]);
     return await deleteFile(filePath);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro ao deletar arquivo pela URL:', error);
-    return { success: false, error: error.message || 'Erro ao processar URL' };
+    return { success: false, error: getErrorMessage(error, 'Erro ao processar URL') };
   }
 }
 
@@ -327,7 +363,7 @@ export async function deleteFileByUrl(url: string): Promise<{ success: boolean; 
 export async function listPatientFiles(
   patientId: string,
   folder?: 'avatar' | 'medical_records' | 'exams' | 'attachments'
-): Promise<{ files: any[]; error?: string }> {
+): Promise<{ files: ListedFile[]; error?: string }> {
   try {
     const path = folder ? `${patientId}/${folder}` : patientId;
 
@@ -343,9 +379,9 @@ export async function listPatientFiles(
     }
 
     return { files: data || [] };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro ao listar arquivos:', error);
-    return { files: [], error: error.message || 'Erro desconhecido' };
+    return { files: [], error: getErrorMessage(error, 'Erro desconhecido') };
   }
 }
 
@@ -362,9 +398,9 @@ export async function downloadFile(filePath: string): Promise<{ data: Blob | nul
     }
 
     return { data };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro ao fazer download:', error);
-    return { data: null, error: error.message || 'Erro desconhecido' };
+    return { data: null, error: getErrorMessage(error, 'Erro desconhecido') };
   }
 }
 

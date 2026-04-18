@@ -20,7 +20,7 @@ import { Loader2, FileSearch, AlertCircle, CheckCircle, Info, Lightbulb, UserPlu
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { webhookRequest } from '@/lib/webhookClient';
@@ -139,6 +139,7 @@ export function AgentCIDModal({ open, onOpenChange }: AgentCIDModalProps) {
       if (!open) return;
 
       try {
+        const supabase = await getSupabaseClient();
         const { data, error } = await supabase
           .from('patients')
           .select('id, name')
@@ -171,6 +172,7 @@ export function AgentCIDModal({ open, onOpenChange }: AgentCIDModalProps) {
     try {
       // user.id já é o profiles.id, conforme definido no AuthContext
       // Salvar a consulta do agente
+      const supabase = await getSupabaseClient();
       const { error: insertError } = await supabase
         .from('agent_consultations')
         .insert({

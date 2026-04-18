@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 
@@ -37,6 +37,14 @@ interface Doctor {
   specialization: string | null;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function AssignDoctorModal({
   open,
   onOpenChange,
@@ -52,7 +60,6 @@ export function AssignDoctorModal({
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [patientName, setPatientName] = useState('');
 
-  // Carregar médicos quando o modal abre
   useEffect(() => {
     if (open) {
       fetchDoctors();
@@ -64,6 +71,7 @@ export function AssignDoctorModal({
   const fetchDoctors = async () => {
     setLoadingDoctors(true);
     try {
+      const supabase = await getSupabaseClient();
       const { data, error } = await supabase
         .from('profiles')
         .select('id, name, specialization')
@@ -72,9 +80,9 @@ export function AssignDoctorModal({
 
       if (error) throw error;
       setDoctors(data || []);
-    } catch (error: any) {
-      console.error('Erro ao carregar médicos:', error);
-      toast.error('Erro ao carregar lista de médicos');
+    } catch (error: unknown) {
+      console.error('Erro ao carregar mÃ©dicos:', error);
+      toast.error(getErrorMessage(error, 'Erro ao carregar lista de mÃ©dicos'));
     } finally {
       setLoadingDoctors(false);
     }
@@ -82,7 +90,7 @@ export function AssignDoctorModal({
 
   const handleAssign = async () => {
     if (!selectedDoctorId) {
-      toast.error('Por favor, selecione um médico');
+      toast.error('Por favor, selecione um mÃ©dico');
       return;
     }
 
@@ -94,31 +102,28 @@ export function AssignDoctorModal({
     setLoading(true);
     try {
       if (isPrePatient) {
-        // Atualizar pré-paciente com o nome (vai triggerar a promoção automática)
+        const supabase = await getSupabaseClient();
         const { error: updateError } = await supabase
           .from('pre_patients')
-          .update({ 
+          .update({
             name: patientName.trim(),
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           })
           .eq('id', patientId);
 
         if (updateError) throw updateError;
 
-        // Aguardar um momento para a trigger de promoção executar
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Agora inserir na tabela patient_doctors (o paciente já foi promovido com o mesmo UUID)
         const { error: assignError } = await supabase
           .from('patient_doctors')
           .insert({
-            patient_id: patientId, // Mesmo ID que era do pré-paciente
+            patient_id: patientId,
             doctor_id: selectedDoctorId,
             is_primary: true,
           });
 
         if (assignError) {
-          // Se der erro de constraint duplicate, significa que já existe, então fazemos update
           if (assignError.code === '23505') {
             const { error: updateAssignError } = await supabase
               .from('patient_doctors')
@@ -135,10 +140,8 @@ export function AssignDoctorModal({
           }
         }
 
-        toast.success('Paciente promovido e médico atribuído com sucesso!');
+        toast.success('Paciente promovido e mÃ©dico atribuÃ­do com sucesso!');
       } else {
-        // Apenas atribuir médico ao paciente existente
-        // Verificar se já existe uma atribuição
         const { data: existing } = await supabase
           .from('patient_doctors')
           .select('id')
@@ -147,9 +150,8 @@ export function AssignDoctorModal({
           .single();
 
         if (existing) {
-          toast.info('Este médico já está atribuído a este paciente');
+          toast.info('Este mÃ©dico jÃ¡ estÃ¡ atribuÃ­do a este paciente');
         } else {
-          // Inserir nova atribuição
           const { error: assignError } = await supabase
             .from('patient_doctors')
             .insert({
@@ -159,15 +161,16 @@ export function AssignDoctorModal({
             });
 
           if (assignError) throw assignError;
-          toast.success('Médico atribuído com sucesso!');
+          toast.success('MÃ©dico atribuÃ­do com sucesso!');
         }
       }
 
+      console.debug('SessÃ£o processada para atribuiÃ§Ã£o de mÃ©dico:', sessionId);
       onSuccess?.();
       onOpenChange(false);
-    } catch (error: any) {
-      console.error('Erro ao atribuir médico:', error);
-      toast.error(error.message || 'Erro ao atribuir médico');
+    } catch (error: unknown) {
+      console.error('Erro ao atribuir mÃ©dico:', error);
+      toast.error(getErrorMessage(error, 'Erro ao atribuir mÃ©dico'));
     } finally {
       setLoading(false);
     }
@@ -178,12 +181,12 @@ export function AssignDoctorModal({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            {isPrePatient ? 'Promover e Atribuir Médico' : 'Atribuir Médico'}
+            {isPrePatient ? 'Promover e Atribuir MÃ©dico' : 'Atribuir MÃ©dico'}
           </DialogTitle>
           <DialogDescription>
             {isPrePatient
-              ? 'Informe o nome completo do paciente e selecione o médico responsável para promover este pré-paciente.'
-              : 'Selecione o médico que será responsável por este paciente.'}
+              ? 'Informe o nome completo do paciente e selecione o mÃ©dico responsÃ¡vel para promover este prÃ©-paciente.'
+              : 'Selecione o mÃ©dico que serÃ¡ responsÃ¡vel por este paciente.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -193,7 +196,7 @@ export function AssignDoctorModal({
               <Label htmlFor="patient-name">Nome Completo do Paciente *</Label>
               <Input
                 id="patient-name"
-                placeholder="Ex: João da Silva"
+                placeholder="Ex: JoÃ£o da Silva"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
                 disabled={loading}
@@ -202,7 +205,7 @@ export function AssignDoctorModal({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="doctor">Médico Responsável *</Label>
+            <Label htmlFor="doctor">MÃ©dico ResponsÃ¡vel *</Label>
             {loadingDoctors ? (
               <div className="flex items-center justify-center p-4">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -214,7 +217,7 @@ export function AssignDoctorModal({
                 disabled={loading}
               >
                 <SelectTrigger id="doctor">
-                  <SelectValue placeholder="Selecione um médico" />
+                  <SelectValue placeholder="Selecione um mÃ©dico" />
                 </SelectTrigger>
                 <SelectContent>
                   {doctors.map((doctor) => (
@@ -228,7 +231,7 @@ export function AssignDoctorModal({
             )}
             {doctors.length === 0 && !loadingDoctors && (
               <p className="text-sm text-muted-foreground">
-                Nenhum médico cadastrado no sistema
+                Nenhum mÃ©dico cadastrado no sistema
               </p>
             )}
           </div>
@@ -251,7 +254,7 @@ export function AssignDoctorModal({
             ) : isPrePatient ? (
               'Promover e Atribuir'
             ) : (
-              'Atribuir Médico'
+              'Atribuir MÃ©dico'
             )}
           </Button>
         </DialogFooter>
@@ -259,4 +262,3 @@ export function AssignDoctorModal({
     </Dialog>
   );
 }
-

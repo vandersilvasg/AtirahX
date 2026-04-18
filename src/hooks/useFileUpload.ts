@@ -9,6 +9,14 @@ interface UploadState {
   filePath: string | null;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function useFileUpload() {
   const [state, setState] = useState<UploadState>({
     uploading: false,
@@ -56,8 +64,8 @@ export function useFileUpload() {
       });
 
       return { success: true, url: result.url, path: result.path };
-    } catch (error: any) {
-      const errorMessage = error.message || 'Erro ao fazer upload';
+    } catch (error) {
+      const errorMessage = getErrorMessage(error, 'Erro ao fazer upload');
       setState({
         uploading: false,
         progress: 0,
@@ -105,8 +113,8 @@ export function useFileUpload() {
       });
 
       return { success: true, url: result.url, path: result.path };
-    } catch (error: any) {
-      const errorMessage = error.message || 'Erro ao fazer upload do avatar';
+    } catch (error) {
+      const errorMessage = getErrorMessage(error, 'Erro ao fazer upload do avatar');
       setState({
         uploading: false,
         progress: 0,
@@ -154,8 +162,8 @@ export function useFileUpload() {
       });
 
       return { success: true, url: result.url, path: result.path };
-    } catch (error: any) {
-      const errorMessage = error.message || 'Erro ao fazer upload do avatar';
+    } catch (error) {
+      const errorMessage = getErrorMessage(error, 'Erro ao fazer upload do avatar');
       setState({
         uploading: false,
         progress: 0,
@@ -174,8 +182,8 @@ export function useFileUpload() {
         return { success: false, error: result.error };
       }
       return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message || 'Erro ao deletar arquivo' };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error, 'Erro ao deletar arquivo') };
     }
   };
 

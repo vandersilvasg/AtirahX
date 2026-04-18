@@ -130,7 +130,7 @@ export function MaintenanceCheck({ children }: { children: React.ReactNode }) {
  * Exemplo 4: Uso em requisições API
  */
 export function ApiDataFetcher() {
-  const [data, setData] = React.useState<any>(null);
+  const [data, setData] = React.useState<unknown>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const { settings } = useSystemSettings();

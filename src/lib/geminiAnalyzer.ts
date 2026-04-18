@@ -1,5 +1,5 @@
 import { getSystemSetting } from '@/hooks/useSystemSettings';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 
 /**
  * Interface para o resultado da análise do Gemini
@@ -47,7 +47,24 @@ interface GeminiProxyResponse {
   modelUsed?: string;
 }
 
+type ConversationContentPart = {
+  text?: string;
+};
+
+type ConversationMessagePayload = {
+  type?: string;
+  content?: string | ConversationContentPart[] | unknown;
+};
+
+type ConversationMessage = {
+  message: string | ConversationMessagePayload;
+  data_e_hora?: string;
+};
+
+type ParsedConversationSummary = Partial<ConversationSummary> & Record<string, unknown>;
+
 async function invokeGeminiProxy(request: GeminiProxyRequest): Promise<GeminiProxyResponse> {
+  const supabase = await getSupabaseClient();
   const { data, error } = await supabase.functions.invoke('gemini-analyzer', {
     body: request,
   });
@@ -291,7 +308,7 @@ export type AnalysisPeriod = 'dia_atual' | 'ultimos_7_dias' | 'ultimos_15_dias' 
 export async function analyzeConversationWithGemini(
   _sessionId: string,
   period: AnalysisPeriod,
-  messages: Array<{ message: any; data_e_hora?: string }>
+  messages: ConversationMessage[]
 ): Promise<ConversationSummary> {
   try {
     // 1. Filtrar mensagens por período
@@ -495,9 +512,9 @@ ${conversationText}
     generatedText = generatedText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
     // 7. Parsear o JSON
-    let parsedResult: any;
+    let parsedResult: ParsedConversationSummary;
     try {
-      parsedResult = JSON.parse(generatedText);
+      parsedResult = JSON.parse(generatedText) as ParsedConversationSummary;
     } catch {
       throw new Error('Erro ao processar resposta da IA. JSON inválido.');
     }
@@ -579,9 +596,9 @@ ${conversationText}
  * Filtra mensagens por período
  */
 function filterMessagesByPeriod(
-  messages: Array<{ message: any; data_e_hora?: string }>,
+  messages: ConversationMessage[],
   period: AnalysisPeriod
-): Array<{ message: any; data_e_hora?: string }> {
+): ConversationMessage[] {
   const now = new Date();
   let cutoffDate: Date;
 
@@ -612,10 +629,10 @@ function filterMessagesByPeriod(
 /**
  * Formata mensagens para análise
  */
-function formatMessagesForAnalysis(messages: Array<{ message: any; data_e_hora?: string }>): string {
+function formatMessagesForAnalysis(messages: ConversationMessage[]): string {
   return messages
     .map((msg, idx) => {
-      const type = msg.message?.type || 'unknown';
+      const type = typeof msg.message === 'string' ? 'unknown' : msg.message?.type || 'unknown';
       const isAI = type.toLowerCase() === 'ai';
       const isHuman = type.toLowerCase() === 'human';
       
@@ -625,7 +642,13 @@ function formatMessagesForAnalysis(messages: Array<{ message: any; data_e_hora?:
       } else if (typeof msg.message?.content === 'string') {
         content = msg.message.content;
       } else if (Array.isArray(msg.message?.content)) {
-        const first = msg.message.content.find((c: any) => typeof c?.text === 'string' || typeof c === 'string');
+        const first = msg.message.content.find(
+          (contentPart): contentPart is string | ConversationContentPart =>
+            typeof contentPart === 'string' ||
+            (typeof contentPart === 'object' &&
+              contentPart !== null &&
+              typeof (contentPart as ConversationContentPart).text === 'string')
+        );
         content = typeof first === 'string' ? first : (first?.text || '');
       } else {
         content = JSON.stringify(msg.message);
@@ -642,17 +665,25 @@ function formatMessagesForAnalysis(messages: Array<{ message: any; data_e_hora?:
 /**
  * Calcula métricas básicas
  */
-function calculateBasicMetrics(messages: Array<{ message: any; data_e_hora?: string }>): {
+function getMessageType(message: ConversationMessage['message']): string {
+  if (typeof message === 'string') {
+    return '';
+  }
+
+  return (message?.type || '').toLowerCase();
+}
+
+function calculateBasicMetrics(messages: ConversationMessage[]): {
   total_mensagens: number;
   mensagens_ia: number;
   mensagens_human: number;
 } {
-  let total = messages.length;
+  const total = messages.length;
   let ia = 0;
   let human = 0;
 
   messages.forEach((msg) => {
-    const type = (msg.message?.type || '').toLowerCase();
+    const type = getMessageType(msg.message);
     if (type === 'ai') ia++;
     else if (type === 'human') human++;
   });
@@ -667,7 +698,7 @@ function calculateBasicMetrics(messages: Array<{ message: any; data_e_hora?: str
 /**
  * Calcula tempo médio de resposta (simplificado)
  */
-function calculateAverageResponseTime(messages: Array<{ message: any; data_e_hora?: string }>): string {
+function calculateAverageResponseTime(messages: ConversationMessage[]): string {
   const intervals: number[] = [];
   
   for (let i = 1; i < messages.length; i++) {
@@ -675,8 +706,8 @@ function calculateAverageResponseTime(messages: Array<{ message: any; data_e_hor
     const curr = messages[i];
     
     if (prev.data_e_hora && curr.data_e_hora) {
-      const prevType = (prev.message?.type || '').toLowerCase();
-      const currType = (curr.message?.type || '').toLowerCase();
+      const prevType = getMessageType(prev.message);
+      const currType = getMessageType(curr.message);
       
       // Calcular tempo entre mensagem do usuário e resposta da IA
       if (prevType === 'human' && currType === 'ai') {
@@ -704,7 +735,7 @@ function calculateAverageResponseTime(messages: Array<{ message: any; data_e_hor
 /**
  * Calcula duração total da conversa
  */
-function calculateTotalDuration(messages: Array<{ message: any; data_e_hora?: string }>): string {
+function calculateTotalDuration(messages: ConversationMessage[]): string {
   if (messages.length < 2) return 'N/A';
   
   const sortedMessages = messages
@@ -730,17 +761,17 @@ function calculateTotalDuration(messages: Array<{ message: any; data_e_hora?: st
 /**
  * Calcula taxa de resposta da IA
  */
-function calculateResponseRate(messages: Array<{ message: any; data_e_hora?: string }>): string {
+function calculateResponseRate(messages: ConversationMessage[]): string {
   let humanMessages = 0;
   let iaResponses = 0;
   
   for (let i = 0; i < messages.length; i++) {
-    const type = (messages[i].message?.type || '').toLowerCase();
+    const type = getMessageType(messages[i].message);
     if (type === 'human') {
       humanMessages++;
       // Verificar se há resposta da IA na próxima mensagem
       if (i + 1 < messages.length) {
-        const nextType = (messages[i + 1].message?.type || '').toLowerCase();
+        const nextType = getMessageType(messages[i + 1].message);
         if (nextType === 'ai') {
           iaResponses++;
         }

@@ -1,7 +1,7 @@
-﻿import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useState, useEffect, useCallback } from 'react';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 
-// Interface para a estrutura horizontal do banco (1 linha por mÃ©dico)
+// Interface para a estrutura horizontal do banco (1 linha por médico)
 export interface DoctorScheduleDB {
   id?: string;
   doctor_id: string;
@@ -15,7 +15,7 @@ export interface DoctorScheduleDB {
   seg_fim?: string;
   seg_ativo?: boolean;
   
-  // TerÃ§a-feira
+  // Terça-feira
   ter_inicio?: string;
   ter_pausa_inicio?: string;
   ter_pausa_fim?: string;
@@ -43,7 +43,7 @@ export interface DoctorScheduleDB {
   sex_fim?: string;
   sex_ativo?: boolean;
   
-  // SÃ¡bado
+  // Sábado
   sab_inicio?: string;
   sab_pausa_inicio?: string;
   sab_pausa_fim?: string;
@@ -80,11 +80,11 @@ export interface DoctorSchedule {
 const DAY_PREFIXES: Record<number, string> = {
   0: 'dom', // Domingo
   1: 'seg', // Segunda
-  2: 'ter', // TerÃ§a
+  2: 'ter', // Terça
   3: 'qua', // Quarta
   4: 'qui', // Quinta
   5: 'sex', // Sexta
-  6: 'sab', // SÃ¡bado
+  6: 'sab', // Sábado
 };
 
 const asString = (value: string | number | boolean | null | undefined): string | undefined =>
@@ -154,7 +154,7 @@ export function useDoctorSchedule(doctorId: string) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Busca os horÃ¡rios do mÃ©dico (1 linha no banco, convertida para array de 7 dias)
+  // Busca os horários do médico (1 linha no banco, convertida para array de 7 dias)
   const fetchSchedules = useCallback(async () => {
     if (!doctorId) return;
 
@@ -162,6 +162,7 @@ export function useDoctorSchedule(doctorId: string) {
     setError(null);
 
     try {
+      const supabase = await getSupabaseClient();
       const { data, error: fetchError } = await supabase
         .from('doctor_schedules')
         .select('*')
@@ -174,37 +175,38 @@ export function useDoctorSchedule(doctorId: string) {
       const schedulesArray = dbToSchedules(data);
       setSchedules(schedulesArray);
     } catch (err: unknown) {
-      console.error('Erro ao buscar horÃ¡rios:', err);
-      setError(getErrorMessage(err, 'Erro ao buscar horÃ¡rios'));
+      console.error('Erro ao buscar horários:', err);
+      setError(getErrorMessage(err, 'Erro ao buscar horários'));
     } finally {
       setLoading(false);
     }
   }, [doctorId]);
 
-  // Salva TODOS os horÃ¡rios de uma vez (UPSERT na Ãºnica linha do mÃ©dico)
+  // Salva TODOS os horários de uma vez (UPSERT na única linha do médico)
   const saveSchedule = async (schedule: DoctorSchedule) => {
-    // Esta funÃ§Ã£o ainda recebe um schedule individual por compatibilidade,
-    // mas na prÃ¡tica devemos usar saveAllSchedules
-    console.warn('saveSchedule estÃ¡ deprecated, use saveAllSchedules');
+    // Esta função ainda recebe um schedule individual por compatibilidade,
+    // mas na prática devemos usar saveAllSchedules
+    console.warn('saveSchedule está deprecated, use saveAllSchedules');
     throw new Error('Use saveAllSchedules para salvar todos os dias de uma vez');
   };
 
-  // Salva TODOS os horÃ¡rios de uma vez (funÃ§Ã£o nova)
+  // Salva TODOS os horários de uma vez (função nova)
   const saveAllSchedules = async (schedulesMap: Record<number, DoctorSchedule>) => {
     setLoading(true);
     setError(null);
 
     try {
+      const supabase = await getSupabaseClient();
       // Converte de vertical (array) para horizontal (objeto do banco)
       const dbData = schedulesToDb(schedulesMap, doctorId);
 
-      // UPSERT: Insere se nÃ£o existe, atualiza se jÃ¡ existe
+      // UPSERT: Insere se não existe, atualiza se já existe
       // Baseado na constraint UNIQUE(doctor_id)
       const { error: upsertError } = await supabase
         .from('doctor_schedules')
         .upsert(dbData, {
           onConflict: 'doctor_id', // Identifica conflitos por doctor_id
-          ignoreDuplicates: false, // NÃ£o ignora, faz UPDATE
+          ignoreDuplicates: false, // Não ignora, faz UPDATE
         });
 
       if (upsertError) throw upsertError;
@@ -212,20 +214,21 @@ export function useDoctorSchedule(doctorId: string) {
       // Recarrega os dados do banco
       await fetchSchedules();
     } catch (err: unknown) {
-      console.error('Erro ao salvar horÃ¡rios:', err);
-      setError(getErrorMessage(err, 'Erro ao salvar horÃ¡rios'));
+      console.error('Erro ao salvar horários:', err);
+      setError(getErrorMessage(err, 'Erro ao salvar horários'));
       throw err;
     } finally {
       setLoading(false);
     }
   };
 
-  // Deleta o registro completo do mÃ©dico
+  // Deleta o registro completo do médico
   const deleteSchedule = async (scheduleId: string) => {
     setLoading(true);
     setError(null);
 
     try {
+      const supabase = await getSupabaseClient();
       const { error: deleteError } = await supabase
         .from('doctor_schedules')
         .delete()
@@ -236,8 +239,8 @@ export function useDoctorSchedule(doctorId: string) {
       // Limpa o estado local
       setSchedules([]);
     } catch (err: unknown) {
-      console.error('Erro ao deletar horÃ¡rio:', err);
-      setError(getErrorMessage(err, 'Erro ao deletar horÃ¡rio'));
+      console.error('Erro ao deletar horário:', err);
+      setError(getErrorMessage(err, 'Erro ao deletar horário'));
       throw err;
     } finally {
       setLoading(false);
@@ -246,11 +249,11 @@ export function useDoctorSchedule(doctorId: string) {
 
   // Toggle ativo/inativo (deprecated - use saveAllSchedules)
   const toggleScheduleActive = async (scheduleId: string, isActive: boolean) => {
-    console.warn('toggleScheduleActive estÃ¡ deprecated, use saveAllSchedules');
+    console.warn('toggleScheduleActive está deprecated, use saveAllSchedules');
     throw new Error('Use saveAllSchedules para atualizar o status');
   };
 
-  // Carrega os horÃ¡rios ao montar o componente
+  // Carrega os horários ao montar o componente
   useEffect(() => {
     if (doctorId) {
       fetchSchedules();
@@ -263,9 +266,11 @@ export function useDoctorSchedule(doctorId: string) {
     error,
     fetchSchedules,
     saveSchedule, // Deprecated
-    saveAllSchedules, // Nova funÃ§Ã£o principal
+    saveAllSchedules, // Nova função principal
     deleteSchedule,
     toggleScheduleActive, // Deprecated
   };
 }
+
+
 

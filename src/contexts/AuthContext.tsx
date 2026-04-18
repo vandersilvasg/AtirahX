@@ -1,6 +1,7 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
-import { User as SupabaseUser } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import type { SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
+import { getSupabaseModule } from '@/lib/supabaseClientLoader';
 
 export type UserRole = 'owner' | 'doctor' | 'secretary';
 
@@ -20,6 +21,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   refreshUser: () => Promise<void>;
+  debugMessage: string;
 }
 
 type ProfileRow = {
@@ -28,6 +30,14 @@ type ProfileRow = {
   role: string | null;
   avatar_url: string | null;
 };
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -39,10 +49,13 @@ function normalizeRole(role: unknown): UserRole | null {
     : null;
 }
 
-async function mapSupabaseUserToAppUser(supaUser: SupabaseUser): Promise<User> {
+async function mapSupabaseUserToAppUser(
+  supabase: SupabaseClient,
+  supaUser: SupabaseUser,
+): Promise<User> {
   const queryPromise = supabase
     .from('profiles')
-    .select('id, name, role, avatar_url')
+    .select('*')
     .eq('auth_user_id', supaUser.id)
     .maybeSingle();
 
@@ -81,6 +94,7 @@ async function mapSupabaseUserToAppUser(supaUser: SupabaseUser): Promise<User> {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [debugMessage, setDebugMessage] = useState<string>('Inicializando...');
   const isMountedRef = useRef(true);
 
   const applySessionUser = async (sessionUser: SupabaseUser | null) => {
@@ -88,16 +102,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (!sessionUser) {
       setUser(null);
+      setDebugMessage('Sessao vazia.');
       return;
     }
 
-    const mapped = await mapSupabaseUserToAppUser(sessionUser);
-    if (isMountedRef.current) {
-      setUser(mapped);
+    setDebugMessage('Mapeando usuario...');
+    try {
+      const { supabase } = await getSupabaseModule();
+      const mapped = await mapSupabaseUserToAppUser(supabase, sessionUser);
+      if (isMountedRef.current) {
+        setUser(mapped);
+        setDebugMessage('Sessao carregada.');
+      }
+    } catch (error) {
+      setDebugMessage(`Erro no mapeamento: ${getErrorMessage(error, 'erro desconhecido')}`);
+      throw error;
     }
   };
 
   const refreshUser = async () => {
+    const { supabase } = await getSupabaseModule();
     const { data, error } = await supabase.auth.getSession();
     if (error) {
       throw new Error(error.message || 'Erro ao carregar sessao atual.');
@@ -110,11 +134,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let active = true;
 
     const init = async () => {
+      setDebugMessage('Iniciando getSession...');
       try {
-        const { data } = await supabase.auth.getSession();
+        const { supabase } = await getSupabaseModule();
+        const { data, error } = await supabase.auth.getSession();
+        setDebugMessage(`getSession retornou. Error: ${error?.message || 'none'}`);
         if (!active) return;
         await applySessionUser(data.session?.user ?? null);
-      } catch {
+      } catch (error) {
+        setDebugMessage(`Erro init: ${getErrorMessage(error, 'erro desconhecido')}`);
         if (active) {
           setUser(null);
         }
@@ -127,29 +155,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     void init();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    let unsubscribe = () => {};
+
+    void getSupabaseModule().then(({ supabase }) => {
       if (!active) return;
-      try {
-        await applySessionUser(session?.user ?? null);
-      } catch {
-        if (active) {
-          setUser(null);
+
+      const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        setDebugMessage(`Evento auth: ${_event}`);
+        if (!active) return;
+        try {
+          await applySessionUser(session?.user ?? null);
+        } catch (error) {
+          setDebugMessage(`Erro auth change: ${getErrorMessage(error, 'erro desconhecido')}`);
+          if (active) {
+            setUser(null);
+          }
+        } finally {
+          if (active) {
+            setIsLoading(false);
+          }
         }
-      } finally {
-        if (active) {
-          setIsLoading(false);
-        }
-      }
+      });
+
+      unsubscribe = () => {
+        authListener.subscription.unsubscribe();
+      };
     });
 
     return () => {
       active = false;
       isMountedRef.current = false;
-      authListener.subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
   const login = async (email: string, password: string) => {
+    const { supabase, isSupabaseConfigured } = await getSupabaseModule();
+
     if (!isSupabaseConfigured) {
       throw new Error('Supabase nao configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
     }
@@ -180,6 +222,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
+    const { supabase } = await getSupabaseModule();
+
     try {
       await supabase.auth.signOut();
     } finally {
@@ -198,6 +242,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isAuthenticated: !!user,
         isLoading,
         refreshUser,
+        debugMessage,
       }}
     >
       {children}

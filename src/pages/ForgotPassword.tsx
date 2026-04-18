@@ -6,9 +6,9 @@ import { Label } from '@/components/ui/label';
 import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
 import { MagicBentoCard } from '@/components/bento/MagicBento';
 import Particles from '@/components/backgrounds/Particles';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -22,6 +22,7 @@ export default function ForgotPassword() {
     setSuccess('');
     setLoading(true);
 
+    const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin + '/reset-password',
     });

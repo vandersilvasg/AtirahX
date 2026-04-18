@@ -21,7 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { SendMedicationModal } from './SendMedicationModal';
@@ -233,6 +233,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
 
       try {
         console.log('Carregando pacientes...');
+        const supabase = await getSupabaseClient();
         const { data, error } = await supabase
           .from('patients')
           .select('id, name, phone')
@@ -282,6 +283,7 @@ export function AgentMedicationModal({ open, onOpenChange }: AgentMedicationModa
       if (lactante) condicoesEspeciais.push('lactante');
 
       // Salvar a consulta do agente
+      const supabase = await getSupabaseClient();
       const { error: insertError } = await supabase
         .from('agent_consultations')
         .insert({

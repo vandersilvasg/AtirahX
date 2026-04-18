@@ -8,10 +8,10 @@ import { FileText, Loader2, AlertTriangle, CheckCircle2, Clock, TrendingUp, Mess
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-import { analyzeConversationWithGemini, type AnalysisPeriod } from '@/lib/geminiAnalyzer';
-import { listMessagesBySession } from '@/lib/medxHistory';
+import {
+  type AnalysisPeriod,
+  type ConversationSummary,
+} from '@/lib/geminiAnalyzer';
 
 type SummaryPeriod = 'dia_atual' | 'ultimos_7_dias' | 'ultimos_15_dias' | 'ultimos_30_dias';
 
@@ -26,7 +26,7 @@ export function SummaryModal({ open, onOpenChange, sessionId, patientPhone }: Su
   const [period, setPeriod] = useState<SummaryPeriod>('dia_atual');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<any | null>(null);
+  const [parsed, setParsed] = useState<ConversationSummary | null>(null);
   const [downloading, setDownloading] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +53,11 @@ export function SummaryModal({ open, onOpenChange, sessionId, patientPhone }: Su
       console.log('📥 Buscando mensagens da sessão:', sessionId);
       console.log('🔄 Período selecionado:', period);
       
+      const [{ analyzeConversationWithGemini }, { listMessagesBySession }] = await Promise.all([
+        import('@/lib/geminiAnalyzer'),
+        import('@/lib/medxHistory'),
+      ]);
+
       const messages = await listMessagesBySession(sessionId);
       console.log('📨 Mensagens recebidas:', messages);
       
@@ -92,176 +97,144 @@ export function SummaryModal({ open, onOpenChange, sessionId, patientPhone }: Su
 
   const handleDownloadPDF = async () => {
     if (!contentRef.current || !parsed) return;
-    
+
     setDownloading(true);
     try {
-      const element = contentRef.current;
-      
-      // Criar estilo temporário para modo PDF
-      const styleElement = document.createElement('style');
-      styleElement.id = 'pdf-print-styles';
-      styleElement.textContent = `
-        .pdf-mode * {
-          color: #000000 !important;
-          background-color: #ffffff !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        .pdf-mode .text-muted-foreground {
-          color: #374151 !important;
-          font-weight: 500 !important;
-        }
-        .pdf-mode .text-xs,
-        .pdf-mode .text-sm {
-          color: #1f2937 !important;
-          font-weight: 500 !important;
-        }
-        .pdf-mode .text-lg,
-        .pdf-mode .text-xl,
-        .pdf-mode .text-2xl,
-        .pdf-mode .text-3xl,
-        .pdf-mode .text-4xl,
-        .pdf-mode .text-5xl,
-        .pdf-mode .font-bold,
-        .pdf-mode .font-semibold {
-          color: #000000 !important;
-          font-weight: 700 !important;
-        }
-        .pdf-mode h3,
-        .pdf-mode h2,
-        .pdf-mode h1 {
-          color: #000000 !important;
-          font-weight: 700 !important;
-        }
-        .pdf-mode .text-primary,
-        .pdf-mode .text-blue-600,
-        .pdf-mode .text-blue-500,
-        .pdf-mode .text-purple-600 {
-          color: #1e40af !important;
-          font-weight: 600 !important;
-        }
-        .pdf-mode .text-green-500,
-        .pdf-mode .text-green-600,
-        .pdf-mode .text-emerald-500 {
-          color: #15803d !important;
-          font-weight: 600 !important;
-        }
-        .pdf-mode .text-amber-500,
-        .pdf-mode .text-amber-600,
-        .pdf-mode .text-orange-500 {
-          color: #b45309 !important;
-          font-weight: 600 !important;
-        }
-        .pdf-mode .text-red-500,
-        .pdf-mode .text-destructive {
-          color: #b91c1c !important;
-          font-weight: 600 !important;
-        }
-        .pdf-mode .bg-gradient-to-br,
-        .pdf-mode .bg-gradient-to-r,
-        .pdf-mode [class*="bg-gradient"] {
-          background: #e5e7eb !important;
-        }
-        .pdf-mode .border,
-        .pdf-mode .border-2,
-        .pdf-mode [class*="border-"] {
-          border-color: #6b7280 !important;
-          border-width: 2px !important;
-        }
-        .pdf-mode .bg-muted,
-        .pdf-mode .bg-card,
-        .pdf-mode .bg-accent {
-          background-color: #f3f4f6 !important;
-        }
-        .pdf-mode svg {
-          opacity: 1 !important;
-        }
-        .pdf-mode .rounded-xl,
-        .pdf-mode .rounded-2xl {
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
-        }
-      `;
-      document.head.appendChild(styleElement);
-      
-      // Adicionar classe PDF ao elemento
-      element.classList.add('pdf-mode');
-      
-      // Aguardar um frame para estilos aplicarem
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      
-      const canvas = await html2canvas(element, {
-        scale: 4,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
-        imageTimeout: 0,
-        removeContainer: true,
-        foreignObjectRendering: false,
-        onclone: (clonedDoc) => {
-          const clonedElement = clonedDoc.getElementById(element.id) || clonedDoc.querySelector('.pdf-mode');
-          if (clonedElement) {
-            clonedElement.style.backgroundColor = '#ffffff';
-            clonedElement.style.color = '#000000';
-            // Forçar todos os textos para preto
-            const allTexts = clonedElement.querySelectorAll('*');
-            allTexts.forEach((el: any) => {
-              if (el.style) {
-                el.style.color = '#000000';
-                if (el.classList.contains('text-lg') || el.classList.contains('font-bold')) {
-                  el.style.fontWeight = '700';
-                }
-              }
-            });
-          }
-        }
-      });
-      
-      // Remover classe e estilo temporário
-      element.classList.remove('pdf-mode');
-      document.head.removeChild(styleElement);
-      
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-        compress: true
-      });
-      
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const imgWidth = pageWidth - (2 * margin);
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      let heightLeft = imgHeight;
-      let position = margin;
-      
-      // Primeira página
-      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= (pageHeight - 2 * margin);
-      
-      // Páginas adicionais se necessário
-      while (heightLeft > 0) {
-        position = -(imgHeight - heightLeft) + margin;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= (pageHeight - 2 * margin);
+      const printWindow = window.open('', '_blank', 'width=1100,height=1400');
+
+      if (!printWindow) {
+        throw new Error('Nao foi possivel abrir a janela de impressao.');
       }
-      
+
       const fileName = `resumo-conversa-${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-      toast.success('PDF baixado com sucesso!');
+      const currentStyles = Array.from(
+        document.querySelectorAll('style, link[rel="stylesheet"]'),
+      )
+        .map((node) => node.outerHTML)
+        .join('\n');
+
+      const printStyles = `
+        <style>
+          :root {
+            color-scheme: light;
+          }
+
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          @page {
+            size: A4;
+            margin: 12mm;
+          }
+
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff !important;
+            color: #111827 !important;
+            font-family: Arial, sans-serif;
+          }
+
+          .print-shell {
+            max-width: 100%;
+            margin: 0 auto;
+            background: #ffffff;
+          }
+
+          .print-shell * {
+            color: inherit;
+          }
+
+          .print-shell svg {
+            opacity: 1 !important;
+          }
+
+          .print-shell .text-transparent {
+            color: #1f2937 !important;
+            -webkit-text-fill-color: #1f2937 !important;
+          }
+
+          .print-shell .text-muted-foreground {
+            color: #4b5563 !important;
+          }
+
+          .print-shell .bg-background,
+          .print-shell .bg-card,
+          .print-shell .bg-accent,
+          .print-shell .bg-muted,
+          .print-shell [class*="bg-gradient"] {
+            background: #ffffff !important;
+          }
+
+          .print-shell .border,
+          .print-shell .border-2,
+          .print-shell [class*="border-"] {
+            border-color: #d1d5db !important;
+          }
+
+          .print-shell .rounded-2xl,
+          .print-shell .rounded-xl {
+            box-shadow: none !important;
+          }
+
+          .print-shell .animate-pulse,
+          .print-shell [class*="animate-"] {
+            animation: none !important;
+          }
+
+          .print-shell .grid,
+          .print-shell .rounded-2xl,
+          .print-shell .rounded-xl {
+            break-inside: avoid;
+          }
+        </style>
+      `;
+
+      const html = `
+        <!doctype html>
+        <html lang="pt-BR">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>${fileName}</title>
+            ${currentStyles}
+            ${printStyles}
+          </head>
+          <body>
+            <main class="print-shell">
+              ${contentRef.current.innerHTML}
+            </main>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+        }, 250);
+      };
+
+      printWindow.addEventListener(
+        'afterprint',
+        () => {
+          printWindow.close();
+        },
+        { once: true },
+      );
+
+      toast.success('Janela de impressao aberta. Escolha "Salvar como PDF" para exportar.');
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
-      toast.error('Erro ao gerar PDF. Tente novamente.');
-      // Garantir limpeza em caso de erro
-      const styleElement = document.getElementById('pdf-print-styles');
-      if (styleElement) document.head.removeChild(styleElement);
-      if (contentRef.current) contentRef.current.classList.remove('pdf-mode');
+      toast.error('Erro ao abrir a impressao. Tente novamente.');
     } finally {
       setDownloading(false);
     }
@@ -269,9 +242,9 @@ export function SummaryModal({ open, onOpenChange, sessionId, patientPhone }: Su
 
   const resumo = useMemo(() => parsed?.resumo_conversa as string | undefined, [parsed]);
   const nota = useMemo(() => Number(parsed?.nota_atendimento ?? 0), [parsed]);
-  const metricas = parsed?.metricas as any | undefined;
-  const qualidade = parsed?.qualidade as any | undefined;
-  const flags = parsed?.flags as any | undefined;
+  const metricas = parsed?.metricas;
+  const qualidade = parsed?.qualidade;
+  const flags = parsed?.flags;
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -523,7 +496,7 @@ export function SummaryModal({ open, onOpenChange, sessionId, patientPhone }: Su
                         <h3 className="font-semibold text-lg">Momentos Críticos</h3>
                       </div>
                       <div className="space-y-3">
-                        {parsed.momentos_criticos.map((momento: any, i: number) => (
+                        {parsed.momentos_criticos.map((momento, i: number) => (
                           <div key={i} className={`p-3 rounded-lg border-2 ${
                             momento.gravidade === 'Alta' ? 'bg-red-500/10 border-red-500/30' : 
                             momento.gravidade === 'Média' ? 'bg-orange-500/10 border-orange-500/30' : 
@@ -728,7 +701,7 @@ export function SummaryModal({ open, onOpenChange, sessionId, patientPhone }: Su
                         <h3 className="font-semibold text-lg">Linha do Tempo</h3>
                       </div>
                       <div className="space-y-3">
-                        {parsed.timeline.map((evento: any, i: number) => (
+                        {parsed.timeline.map((evento, i: number) => (
                           <div key={i} className="flex items-start gap-3">
                             <div className={`mt-1 w-3 h-3 rounded-full flex-shrink-0 ${
                               evento.tipo === 'success' ? 'bg-green-500' :
@@ -839,12 +812,12 @@ export function SummaryModal({ open, onOpenChange, sessionId, patientPhone }: Su
                 {downloading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Gerando PDF...
+                    Preparando impressao...
                   </>
                 ) : (
                   <>
                     <Download className="w-4 h-4 mr-2" />
-                    Baixar PDF
+                    Salvar PDF
                   </>
                 )}
               </Button>
@@ -863,3 +836,4 @@ export function SummaryModal({ open, onOpenChange, sessionId, patientPhone }: Su
     </Dialog>
   );
 }
+

@@ -1,16 +1,38 @@
+import { lazy, Suspense } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MagicBentoGrid, MagicBentoCard } from '@/components/bento/MagicBento';
-import { Users, Calendar, Activity, Stethoscope } from 'lucide-react';
-import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
-import { PeakHoursChartCard } from '@/components/metrics/PeakHoursChartCard';
-import { WeekdayChartCard } from '@/components/metrics/WeekdayChartCard';
-import { DoctorPieChartCard } from '@/components/metrics/DoctorPieChartCard';
+import { DashboardCrmSummary } from '@/components/metrics/DashboardCrmSummary';
+import { DashboardStatsGrid } from '@/components/metrics/DashboardStatsGrid';
 import { InsuranceDonutCard } from '@/components/metrics/InsuranceDonutCard';
-import { DiseaseTreemapCard } from '@/components/metrics/DiseaseTreemapCard';
+import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
+import { Activity, Calendar, Stethoscope, Users } from 'lucide-react';
+
+const PeakHoursChartCard = lazy(() =>
+  import('@/components/metrics/PeakHoursChartCard').then((module) => ({
+    default: module.PeakHoursChartCard,
+  }))
+);
+const WeekdayChartCard = lazy(() =>
+  import('@/components/metrics/WeekdayChartCard').then((module) => ({
+    default: module.WeekdayChartCard,
+  }))
+);
+const DoctorPieChartCard = lazy(() =>
+  import('@/components/metrics/DoctorPieChartCard').then((module) => ({
+    default: module.DoctorPieChartCard,
+  }))
+);
+const DiseaseTreemapCard = lazy(() =>
+  import('@/components/metrics/DiseaseTreemapCard').then((module) => ({
+    default: module.DiseaseTreemapCard,
+  }))
+);
 
 export default function Dashboard() {
   const metrics = useDashboardMetrics();
+  const metricValue = (value: number) => (metrics.loading ? '...' : String(value));
+  const chartFallback = (
+    <div className="min-h-[320px] animate-pulse rounded-3xl border bg-card/60" />
+  );
 
   const stats = [
     {
@@ -18,76 +40,66 @@ export default function Dashboard() {
       value: String(metrics.consultasHoje),
       icon: Calendar,
       trend: metrics.calculateTrend(metrics.consultasMesAtual, metrics.consultasMesAnterior),
-      description: 'vs. mês passado'
+      description: 'vs. mes passado',
     },
     {
       title: 'Pacientes CRM',
       value: String(metrics.pacientesCRM),
       icon: Users,
-      trend: metrics.calculateTrend(metrics.pacientesCRMMesAtual, metrics.pacientesCRMMesAnterior),
-      description: 'novos este mês'
+      trend: metrics.calculateTrend(
+        metrics.pacientesCRMMesAtual,
+        metrics.pacientesCRMMesAnterior
+      ),
+      description: 'novos este mes',
     },
     {
-      title: 'Pré Pacientes',
+      title: 'Pre Pacientes',
       value: String(metrics.prePatientes),
       icon: Activity,
-      trend: '—',
-      description: 'aguardando conversão'
+      trend: '-',
+      description: 'aguardando conversao',
     },
     {
-      title: 'Equipe Médica',
+      title: 'Equipe Medica',
       value: String(metrics.totalMedicos),
       icon: Stethoscope,
-      trend: metrics.totalSecretarias > 0 ? `+${metrics.totalSecretarias} sec.` : '—',
-      description: 'médicos ativos'
+      trend: metrics.totalSecretarias > 0 ? `+${metrics.totalSecretarias} sec.` : '-',
+      description: 'medicos ativos',
     },
   ];
 
   return (
-    <DashboardLayout requiredRoles={['owner']}>
-      <div className="p-8 space-y-8">
-        {/* Header */}
+    <DashboardLayout requiredRoles={['owner', 'secretary']}>
+      <div className="space-y-8 p-8">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Métricas de Atendimento</h1>
-          <p className="text-muted-foreground mt-1">Visão geral do desempenho da clínica</p>
+          <h1 className="text-3xl font-bold text-foreground">Metricas de Atendimento</h1>
+          <p className="mt-1 text-muted-foreground">Visao geral do desempenho da clinica</p>
         </div>
 
-        {/* Stats Grid - Magic Bento */}
-        <MagicBentoGrid>
-          {stats.map((stat, index) => (
-            <MagicBentoCard key={index} accent={index % 2 === 0 ? 'primary' : 'accent'}>
-              <div className="flex items-start justify-between pb-2">
-                <div className="text-sm font-medium text-muted-foreground">{stat.title}</div>
-                <stat.icon className="w-4 h-4 text-primary" />
-              </div>
-              <div className="text-3xl font-bold text-foreground">
-                {metrics.loading ? '...' : stat.value}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                <span className={String(stat.trend).startsWith('+') ? 'text-green-500' : String(stat.trend).startsWith('-') ? 'text-red-500' : 'text-muted-foreground'}>
-                  {stat.trend}
-                </span>{' '}
-                {stat.description}
-              </p>
-            </MagicBentoCard>
-          ))}
-        </MagicBentoGrid>
+        <DashboardStatsGrid loading={metrics.loading} stats={stats} />
 
-        {/* Charts Grid - Linha 1: Gráficos de Tempo */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <PeakHoursChartCard />
-          <WeekdayChartCard />
+        <DashboardCrmSummary metricValue={metricValue} metrics={metrics} />
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Suspense fallback={chartFallback}>
+            <PeakHoursChartCard />
+          </Suspense>
+          <Suspense fallback={chartFallback}>
+            <WeekdayChartCard />
+          </Suspense>
         </div>
 
-        {/* Charts Grid - Linha 2: Gráficos de Pizza */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DoctorPieChartCard />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Suspense fallback={chartFallback}>
+            <DoctorPieChartCard />
+          </Suspense>
           <InsuranceDonutCard />
         </div>
 
-        {/* Charts Grid - Linha 3: Gráfico de Diagnósticos */}
         <div className="grid grid-cols-1 gap-6">
-          <DiseaseTreemapCard />
+          <Suspense fallback={chartFallback}>
+            <DiseaseTreemapCard />
+          </Suspense>
         </div>
       </div>
     </DashboardLayout>

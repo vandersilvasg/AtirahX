@@ -1,16 +1,8 @@
 import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react';
+import type { Appointment } from '@/components/agenda/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
-
-interface Appointment {
-  id: string;
-  patient_id: string;
-  doctor_id?: string;
-  scheduled_at: string;
-  status: string;
-  notes?: string;
-}
 
 interface WeekCalendarProps {
   appointments: Appointment[];

@@ -1,51 +1,72 @@
-import { NavLink, useNavigate } from 'react-router-dom';
-import { 
-  BarChart3, 
-  Calendar, 
-  ClipboardList, 
-  MessageSquare, 
-  Users, 
-  MessageCircle, 
-  Video, 
+﻿import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  BarChart3,
+  Calendar,
+  ClipboardList,
+  MessageSquare,
+  Users,
+  MessageCircle,
+  Video,
   Plug,
   Settings,
   LogOut,
   Building2,
   FileSpreadsheet,
-  UserCircle
+  UserCircle,
+  SquareKanban,
+  type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
+type MenuChild = {
+  path: string;
+  label: string;
+};
+
+type MenuItem = {
+  path?: string;
+  icon: LucideIcon;
+  label: string;
+  roles: string[];
+  children?: MenuChild[];
+};
+
 export const Sidebar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const menuItems = [
-    { 
-      path: '/dashboard', 
-      icon: BarChart3, 
-      label: 'Métricas', 
-      roles: ['owner'] 
+  const menuItems: MenuItem[] = [
+    {
+      path: '/dashboard',
+      icon: BarChart3,
+      label: 'Metricas',
+      roles: ['owner'],
     },
-    { 
-      path: '/agenda', 
-      icon: Calendar, 
-      label: 'Agenda', 
-      roles: ['owner', 'doctor', 'secretary'] 
+    {
+      path: '/crm',
+      icon: SquareKanban,
+      label: 'CRM',
+      roles: ['owner', 'secretary'],
     },
-    { 
-      path: '/follow-up', 
-      icon: ClipboardList, 
-      label: 'Follow Up', 
-      roles: ['owner', 'secretary'] 
+    {
+      path: '/agenda',
+      icon: Calendar,
+      label: 'Agenda',
+      roles: ['owner', 'doctor', 'secretary'],
     },
-    { 
-      path: '/assistant', 
-      icon: MessageSquare, 
-      label: 'Assistente', 
-      roles: ['owner', 'doctor', 'secretary'] 
+    {
+      path: '/follow-up',
+      icon: ClipboardList,
+      label: 'Follow Up',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/assistant',
+      icon: MessageSquare,
+      label: 'Assistente',
+      roles: ['owner', 'doctor', 'secretary'],
     },
     {
       icon: Users,
@@ -53,62 +74,60 @@ export const Sidebar = () => {
       roles: ['owner', 'doctor', 'secretary'],
       children: [
         { path: '/patients', label: 'Pacientes CRM' },
-        { path: '/pre-patients', label: 'Pré Pacientes' }
-      ]
+        { path: '/pre-patients', label: 'Pre Pacientes' },
+      ],
     },
-    { 
-      path: '/convenios', 
-      icon: Building2, 
-      label: 'Convênios', 
-      roles: ['doctor'] 
+    {
+      path: '/convenios',
+      icon: Building2,
+      label: 'Convenios',
+      roles: ['doctor'],
     },
-    { 
-      path: '/doctors-insurance', 
-      icon: FileSpreadsheet, 
-      label: 'Visão de Convênios', 
-      roles: ['owner', 'secretary'] 
+    {
+      path: '/doctors-insurance',
+      icon: FileSpreadsheet,
+      label: 'Visao de Convenios',
+      roles: ['owner', 'secretary'],
     },
-    { 
-      path: '/whatsapp', 
-      icon: MessageCircle, 
-      label: 'WhatsApp', 
-      roles: ['owner', 'secretary'] 
+    {
+      path: '/whatsapp',
+      icon: MessageCircle,
+      label: 'WhatsApp',
+      roles: ['owner', 'secretary'],
     },
-    { 
-      path: '/teleconsulta', 
-      icon: Video, 
-      label: 'Teleconsulta', 
-      roles: ['owner', 'doctor'] 
+    {
+      path: '/teleconsulta',
+      icon: Video,
+      label: 'Teleconsulta',
+      roles: ['owner', 'doctor'],
     },
-    { 
-      path: '/integration', 
-      icon: Plug, 
-      label: 'Integração', 
-      roles: ['owner'] 
+    {
+      path: '/integration',
+      icon: Plug,
+      label: 'Integracao',
+      roles: ['owner'],
     },
-    { 
-      path: '/clinic-info', 
-      icon: Settings, 
-      label: 'Informações da Clínica', 
-      roles: ['owner'] 
+    {
+      path: '/clinic-info',
+      icon: Settings,
+      label: 'Informacoes da Clinica',
+      roles: ['owner'],
     },
-    { 
-      path: '/users', 
-      icon: Settings, 
-      label: 'Usuários', 
-      roles: ['owner'] 
+    {
+      path: '/users',
+      icon: Settings,
+      label: 'Usuarios',
+      roles: ['owner'],
     },
-    { 
-      path: '/profile', 
-      icon: UserCircle, 
-      label: 'Meu Perfil', 
-      roles: ['owner', 'doctor', 'secretary'] 
+    {
+      path: '/profile',
+      icon: UserCircle,
+      label: 'Meu Perfil',
+      roles: ['owner', 'doctor', 'secretary'],
     },
   ];
 
-  const visibleItems = menuItems.filter(item => 
-    item.roles.includes(user?.role || '')
-  );
+  const visibleItems = menuItems.filter((item) => item.roles.includes(user?.role || ''));
 
   const handleLogout = async () => {
     try {
@@ -120,14 +139,12 @@ export const Sidebar = () => {
 
   return (
     <div className="h-screen w-64 bg-sidebar-background border-r border-sidebar-border flex flex-col overflow-hidden">
-      {/* Logo */}
       <div className="p-6 flex justify-center flex-shrink-0">
         <img src="/logo-interno.png" alt="MedX" className="w-32 h-32 object-contain" />
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {visibleItems.map((item) => (
+        {visibleItems.map((item) =>
           item.children ? (
             <div key={item.label} className="space-y-1">
               <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sidebar-foreground">
@@ -135,7 +152,7 @@ export const Sidebar = () => {
                 <span className="text-sm font-medium">{item.label}</span>
               </div>
               <div className="ml-6 space-y-1">
-                {item.children.map((child: any) => (
+                {item.children.map((child) => (
                   <NavLink
                     key={child.path}
                     to={child.path}
@@ -155,7 +172,7 @@ export const Sidebar = () => {
           ) : (
             <NavLink
               key={item.path}
-              to={item.path}
+              to={item.path || '/'}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
                   isActive
@@ -168,16 +185,18 @@ export const Sidebar = () => {
               <span className="text-sm font-medium">{item.label}</span>
             </NavLink>
           )
-        ))}
+        )}
       </nav>
 
-      {/* User Info */}
       <div className="p-4 border-t border-sidebar-border flex-shrink-0">
-        <NavLink to="/profile" className="flex items-center gap-3 hover:bg-sidebar-accent/50 rounded-lg p-2 -m-2 transition-colors">
+        <NavLink
+          to="/profile"
+          className="flex items-center gap-3 hover:bg-sidebar-accent/50 rounded-lg p-2 -m-2 transition-colors"
+        >
           <Avatar className="w-10 h-10">
             <AvatarImage src={user?.avatar_url} alt={user?.name} />
             <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
-              {user?.name ? user.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'U'}
+              {user?.name ? user.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() : 'U'}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
@@ -187,7 +206,6 @@ export const Sidebar = () => {
         </NavLink>
       </div>
 
-      {/* Logout */}
       <div className="p-4 border-t border-sidebar-border flex-shrink-0">
         <Button
           variant="ghost"

@@ -16,12 +16,15 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
+  const { login, isAuthenticated, isLoading: isAuthLoading, user, debugMessage } = useAuth();
 
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-background">
-        <p className="text-muted-foreground">Carregando sessao...</p>
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background">
+        <p className="text-muted-foreground mb-4">Carregando sessao...</p>
+        <code className="p-4 bg-muted rounded-md text-sm text-primary max-w-lg text-center break-words border border-border">
+          Status de Auth: {debugMessage}
+        </code>
       </div>
     );
   }

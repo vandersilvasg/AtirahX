@@ -19,7 +19,7 @@ import {
 import { Loader2, Microscope, AlertCircle, CheckCircle, FileUp, FileText, UserPlus, Link2, X, Image } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { uploadFile } from '@/lib/storageUtils';
@@ -177,6 +177,7 @@ export function AgentExamModal({ open, onOpenChange }: AgentExamModalProps) {
       if (!open) return;
 
       try {
+        const supabase = await getSupabaseClient();
         const { data, error } = await supabase
           .from('patients')
           .select('id, name')
@@ -222,6 +223,7 @@ export function AgentExamModal({ open, onOpenChange }: AgentExamModalProps) {
       console.log('✅ Upload concluído:', { fileUrl, filePath });
 
       // 2. Salvar o PDF como anexo médico
+      const supabase = await getSupabaseClient();
       const { error: attachmentError } = await supabase
         .from('medical_attachments')
         .insert({

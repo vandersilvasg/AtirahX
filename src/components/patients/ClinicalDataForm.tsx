@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -12,6 +12,14 @@ interface ClinicalDataFormProps {
   patientId: string;
   onSuccess?: () => void;
   onCancel?: () => void;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
 }
 
 export function ClinicalDataForm({ patientId, onSuccess, onCancel }: ClinicalDataFormProps) {
@@ -45,6 +53,7 @@ export function ClinicalDataForm({ patientId, onSuccess, onCancel }: ClinicalDat
     try {
       const bmi = calculateBMI();
 
+      const supabase = await getSupabaseClient();
       const { error } = await supabase.from('clinical_data').insert({
         patient_id: patientId,
         doctor_id: user?.id || null,
@@ -71,9 +80,9 @@ export function ClinicalDataForm({ patientId, onSuccess, onCancel }: ClinicalDat
 
       toast.success('Dados clínicos salvos com sucesso!');
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao salvar dados clínicos:', error);
-      toast.error(error.message || 'Erro ao salvar dados');
+      toast.error(getErrorMessage(error, 'Erro ao salvar dados'));
     } finally {
       setLoading(false);
     }

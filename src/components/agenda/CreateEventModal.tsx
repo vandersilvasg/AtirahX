@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Plus, Search, User, Calendar, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { webhookRequest } from '@/lib/webhookClient';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -87,6 +87,7 @@ export function CreateEventModal({
   const fetchPatients = async () => {
     setLoadingPatients(true);
     try {
+      const supabase = await getSupabaseClient();
       const { data, error } = await supabase
         .from('patients')
         .select('id, name, email, phone')
@@ -106,6 +107,7 @@ export function CreateEventModal({
   const fetchDoctors = async () => {
     setLoadingDoctors(true);
     try {
+      const supabase = await getSupabaseClient();
       // Primeiro busca os mÃ©dicos
       const { data: doctorsData, error: doctorsError } = await supabase
         .from('profiles')
@@ -200,6 +202,7 @@ export function CreateEventModal({
 
     setLoading(true);
     try {
+      const supabase = await getSupabaseClient();
       const { data, error } = await supabase
         .from('patients')
         .insert({

@@ -1,16 +1,16 @@
 /**
- * Componentes de Métricas
- * Exportações centralizadas de todos os cards de métricas do dashboard
+ * Componentes de metricas
+ * Exportacoes centralizadas dos cards do dashboard
  */
 
-// Cards simples (sem gráficos)
+// Cards simples
 export { PeakHoursCard } from './PeakHoursCard';
 export { WeekdayDistributionCard } from './WeekdayDistributionCard';
 export { ConsultationsByDoctorCard } from './ConsultationsByDoctorCard';
 export { HealthInsuranceCard } from './HealthInsuranceCard';
 export { DiseaseDistributionCard } from './DiseaseDistributionCard';
 
-// Cards com gráficos Recharts
+// Cards com visualizacao grafica nativa
 export { PeakHoursChartCard } from './PeakHoursChartCard';
 export { WeekdayChartCard } from './WeekdayChartCard';
 export { DoctorPieChartCard } from './DoctorPieChartCard';

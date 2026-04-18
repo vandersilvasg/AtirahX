@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useState, useEffect, useCallback } from 'react';
+import { getSupabaseClient, getSupabaseModule } from '@/lib/supabaseClientLoader';
 
 interface SystemSetting {
   key: string;
@@ -13,49 +13,28 @@ interface UseSystemSettingsReturn {
   refreshSettings: () => Promise<void>;
 }
 
-/**
- * Hook para acessar configurações do sistema armazenadas no banco de dados
- * @param key - (Opcional) Chave específica da configuração. Se omitido, retorna todas.
- * @returns Objeto com settings, loading, error e função para atualizar
- * 
- * @example
- * // Buscar todas as configurações
- * const { settings, loading } = useSystemSettings();
- * const apiUrl = settings.api_base_url;
- * 
- * @example
- * // Buscar configuração específica
- * const { settings } = useSystemSettings('api_base_url');
- * const apiUrl = settings.api_base_url;
- */
 export const useSystemSettings = (key?: string): UseSystemSettingsReturn => {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      let query = supabase
-        .from('system_settings')
-        .select('key, value')
-        .eq('is_active', true);
-
+      const supabase = await getSupabaseClient();
+      let query = supabase.from('system_settings').select('key, value').eq('is_active', true);
       if (key) {
         query = query.eq('key', key).single();
       }
 
       const { data, error: fetchError } = await query;
-
       if (fetchError) throw fetchError;
 
       if (key && data && !Array.isArray(data)) {
-        // Retorno de configuração única
         setSettings({ [data.key]: data.value });
       } else if (Array.isArray(data)) {
-        // Retorno de múltiplas configurações
         const settingsObj = data.reduce((acc, item: SystemSetting) => {
           acc[item.key] = item.value;
           return acc;
@@ -65,37 +44,45 @@ export const useSystemSettings = (key?: string): UseSystemSettingsReturn => {
         setSettings({});
       }
     } catch (err) {
-      console.error('Erro ao buscar configurações do sistema:', err);
+      console.error('Erro ao buscar configuracoes do sistema:', err);
       setError(err as Error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [key]);
 
   useEffect(() => {
-    fetchSettings();
+    void fetchSettings();
 
-    // Subscrever mudanças em tempo real
-    const subscription = supabase
-      .channel('system_settings_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'system_settings',
-        },
-        (payload) => {
-          console.log('Configuração do sistema alterada:', payload);
-          fetchSettings();
-        }
-      )
-      .subscribe();
+    let isActive = true;
+    let cleanup = () => {};
+
+    void (async () => {
+      const { supabase } = await getSupabaseModule();
+      if (!isActive) return;
+
+      const channel = supabase
+        .channel('system_settings_changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'system_settings' },
+          (payload) => {
+            console.log('Configuracao do sistema alterada:', payload);
+            void fetchSettings();
+          }
+        )
+        .subscribe();
+
+      cleanup = () => {
+        supabase.removeChannel(channel);
+      };
+    })();
 
     return () => {
-      subscription.unsubscribe();
+      isActive = false;
+      cleanup();
     };
-  }, [key]);
+  }, [fetchSettings]);
 
   return {
     settings,
@@ -105,18 +92,10 @@ export const useSystemSettings = (key?: string): UseSystemSettingsReturn => {
   };
 };
 
-/**
- * Função auxiliar para buscar uma configuração específica diretamente
- * @param key - Chave da configuração
- * @returns Valor da configuração ou null se não encontrada
- * 
- * @example
- * const apiUrl = await getSystemSetting('api_base_url');
- */
 export async function getSystemSetting(key: string): Promise<string | null> {
   try {
-    console.log(`🔍 [getSystemSetting] Buscando configuração: ${key}`);
-    
+    console.log(`Buscando configuracao: ${key}`);
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('system_settings')
       .select('value')
@@ -124,38 +103,28 @@ export async function getSystemSetting(key: string): Promise<string | null> {
       .eq('is_active', true)
       .single();
 
-    console.log(`📊 [getSystemSetting] Resultado para '${key}':`, { data, error });
-
     if (error || !data) {
-      console.error(`❌ [getSystemSetting] Configuração '${key}' não encontrada:`, error);
+      console.error(`Configuracao '${key}' nao encontrada:`, error);
       return null;
     }
 
-    console.log(`✅ [getSystemSetting] Valor encontrado para '${key}':`, data.value?.substring(0, 20) + '...');
     return data.value;
   } catch (err) {
-    console.error(`❌ [getSystemSetting] Erro ao buscar configuração '${key}':`, err);
+    console.error(`Erro ao buscar configuracao '${key}':`, err);
     return null;
   }
 }
 
-/**
- * Função auxiliar para buscar todas as configurações ativas
- * @returns Objeto com todas as configurações
- * 
- * @example
- * const settings = await getAllSystemSettings();
- * console.log(settings.api_base_url);
- */
 export async function getAllSystemSettings(): Promise<Record<string, string>> {
   try {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('system_settings')
       .select('key, value')
       .eq('is_active', true);
 
     if (error || !data) {
-      console.error('Erro ao buscar configurações do sistema:', error);
+      console.error('Erro ao buscar configuracoes do sistema:', error);
       return {};
     }
 
@@ -164,8 +133,7 @@ export async function getAllSystemSettings(): Promise<Record<string, string>> {
       return acc;
     }, {} as Record<string, string>);
   } catch (err) {
-    console.error('Erro ao buscar configurações do sistema:', err);
+    console.error('Erro ao buscar configuracoes do sistema:', err);
     return {};
   }
 }
-

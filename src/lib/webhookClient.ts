@@ -1,5 +1,5 @@
 import { getApiBaseUrl, getApiTimeout } from '@/lib/apiConfig';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 
 type WebhookRequestOptions = {
   method?: string;
@@ -47,6 +47,7 @@ async function callProxyDirect(
   body: unknown
 ): Promise<unknown> {
   const proxyUrl = `${SUPABASE_URL}/functions/v1/webhook-proxy`;
+  const supabase = await getSupabaseClient();
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData.session?.access_token;
 

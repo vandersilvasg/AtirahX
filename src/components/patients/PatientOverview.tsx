@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PatientAvatarUpload } from './PatientAvatarUpload';
 import { PatientStatsCards } from './PatientStatsCards';
 import { PatientAlerts } from './PatientAlerts';
-import { ClinicalEvolutionChart } from './ClinicalEvolutionChart';
-import { PatientEditModal } from './PatientEditModal';
-import { Patient, MedicalRecord, ClinicalData, ExamHistory, Anamnesis } from '@/hooks/usePatientData';
+import {
+  Patient,
+  MedicalRecord,
+  ClinicalData,
+  ExamHistory,
+  Anamnesis,
+  PatientDoctorRelation,
+} from '@/hooks/usePatientData';
 import { 
   Mail, 
   Phone, 
@@ -22,9 +27,21 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+const ClinicalEvolutionChart = lazy(() =>
+  import('./ClinicalEvolutionChart').then((module) => ({
+    default: module.ClinicalEvolutionChart,
+  })),
+);
+
+const PatientEditModal = lazy(() =>
+  import('./PatientEditModal').then((module) => ({
+    default: module.PatientEditModal,
+  })),
+);
+
 interface PatientOverviewProps {
   patient: Patient;
-  doctors: any[];
+  doctors: PatientDoctorRelation[];
   medicalRecords: MedicalRecord[];
   clinicalData: ClinicalData[];
   examHistory: ExamHistory[];
@@ -223,7 +240,7 @@ export function PatientOverview({
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {doctors.map((pd: any) => (
+              {doctors.map((pd) => (
                 <Badge key={pd.id} variant="secondary" className="py-1.5 px-3">
                   {pd.doctor?.name}
                   {pd.doctor?.specialization && (
@@ -243,16 +260,22 @@ export function PatientOverview({
 
       {/* Gráficos de Evolução Clínica */}
       {clinicalData.length > 0 && (
-        <ClinicalEvolutionChart clinicalData={clinicalData} />
+        <Suspense fallback={<div className="h-64 animate-pulse rounded-lg bg-muted/40" />}>
+          <ClinicalEvolutionChart clinicalData={clinicalData} />
+        </Suspense>
       )}
 
       {/* Modal de Edição */}
-      <PatientEditModal
-        patient={patient}
-        open={showEditModal}
-        onOpenChange={setShowEditModal}
-        onSuccess={handleEditSuccess}
-      />
+      {showEditModal && (
+        <Suspense fallback={null}>
+          <PatientEditModal
+            patient={patient}
+            open={showEditModal}
+            onOpenChange={setShowEditModal}
+            onSuccess={handleEditSuccess}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

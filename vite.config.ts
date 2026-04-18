@@ -9,45 +9,57 @@ export default defineConfig(({ mode }) => {
   const enableTagger = env.VITE_ENABLE_COMPONENT_TAGGER === "true";
 
   return {
-    // Base URL - use '/' para domínio raiz ou subdomínio
-    // Se estiver em subpasta, mude para '/subpasta/'
-    base: '/',
-    
+    // Base URL - use "/" para dominio raiz ou subdominio.
+    // Se estiver em subpasta, mude para "/subpasta/".
+    base: "/",
+
+    define: {
+      "process.env.NODE_ENV": JSON.stringify("production"),
+    },
+
     server: {
       host: "::",
       port: 8080,
     },
-    
-    // Configurações de build para produção
+
     build: {
-      // Gerar sourcemaps para debug em produção (remova se não precisar)
       sourcemap: false,
-      // Otimizar chunks
       rollupOptions: {
         output: {
           manualChunks: {
-            // Separa bibliotecas grandes em chunks próprios
-            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-            'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select'],
-            'chart-vendor': ['recharts'],
+            "react-vendor": ["react", "react-dom", "react-router-dom"],
+            "ui-vendor": [
+              "@radix-ui/react-dialog",
+              "@radix-ui/react-dropdown-menu",
+              "@radix-ui/react-select",
+            ],
+            "form-vendor": ["react-hook-form", "@hookform/resolvers", "zod"],
+            "date-vendor": ["date-fns", "dayjs", "react-day-picker"],
+            "icon-vendor": ["lucide-react"],
           },
         },
       },
-      // Aumentar limite de warning de tamanho de chunk
       chunkSizeWarningLimit: 1000,
     },
-    
+
     plugins: [react(), enableTagger && componentTagger()].filter(Boolean),
-    
+
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
     },
-    
+
     optimizeDeps: {
-      include: ['cmdk'],
+      include: ["cmdk"],
       force: true,
+    },
+
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: "./src/test/setup.ts",
+      css: false,
     },
   };
 });

@@ -1,8 +1,7 @@
+import { useMemo } from 'react';
 import { Clock } from 'lucide-react';
 import { MagicBentoCard } from '@/components/bento/MagicBento';
 import { useRealtimeList } from '@/hooks/useRealtimeList';
-import { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface Appointment {
   scheduled_at: string;
@@ -19,7 +18,6 @@ export function PeakHoursChartCard() {
   const hourStats = useMemo(() => {
     const hourCounts: Record<number, number> = {};
 
-    // Buscar de appointments
     appointments.forEach((apt) => {
       if (apt.scheduled_at) {
         const date = new Date(apt.scheduled_at);
@@ -28,7 +26,6 @@ export function PeakHoursChartCard() {
       }
     });
 
-    // TAMBÉM buscar de medical_records
     medicalRecords.forEach((record) => {
       if (record.appointment_date) {
         const date = new Date(record.appointment_date);
@@ -37,61 +34,62 @@ export function PeakHoursChartCard() {
       }
     });
 
-    // Converter para array e ordenar por horário
-    const sorted = Object.entries(hourCounts)
+    return Object.entries(hourCounts)
       .map(([hour, count]) => ({
-        hour: parseInt(hour),
+        hour: Number.parseInt(hour, 10),
         count,
         name: `${String(hour).padStart(2, '0')}:00`,
       }))
       .sort((a, b) => a.hour - b.hour);
-
-    return sorted;
   }, [appointments, medicalRecords]);
 
-  const COLORS = ['#5227FF', '#8B5CF6', '#A78BFA', '#C4B5FD', '#DDD6FE'];
+  const maxCount = Math.max(...hourStats.map((item) => item.count), 1);
+  const colors = ['#5227FF', '#8B5CF6', '#A78BFA', '#C4B5FD', '#DDD6FE'];
 
   return (
     <MagicBentoCard>
       <div className="p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Clock className="w-5 h-5 text-primary" />
-          <span className="text-lg font-semibold">Horários Mais Procurados</span>
+        <div className="mb-4 flex items-center gap-2">
+          <Clock className="h-5 w-5 text-primary" />
+          <span className="text-lg font-semibold">Horarios Mais Procurados</span>
         </div>
+
         {hourStats.length > 0 ? (
-          <ResponsiveContainer width="100%" height={350}>
-            <BarChart data={hourStats}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.1} />
-              <XAxis 
-                dataKey="name" 
-                stroke="#888"
-                style={{ fontSize: '12px' }}
-              />
-              <YAxis 
-                stroke="#888"
-                style={{ fontSize: '12px' }}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#1a1a1a', 
-                  border: '1px solid #333',
-                  borderRadius: '8px',
-                  color: '#fff'
-                }}
-                labelStyle={{ color: '#fff' }}
-                cursor={{ fill: 'rgba(82, 39, 255, 0.1)' }}
-              />
-              <Bar dataKey="count" radius={[8, 8, 0, 0]}>
-                {hourStats.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+          <div className="space-y-4">
+            <div className="flex h-[280px] items-end gap-3 rounded-2xl border border-border/50 bg-background/40 p-4">
+              {hourStats.map((entry, index) => (
+                <div key={entry.name} className="flex flex-1 flex-col items-center justify-end gap-3">
+                  <span className="text-xs font-medium text-foreground">{entry.count}</span>
+                  <div className="flex h-52 w-full items-end">
+                    <div
+                      className="w-full rounded-t-xl transition-all duration-500"
+                      style={{
+                        height: `${Math.max((entry.count / maxCount) * 100, 6)}%`,
+                        background: `linear-gradient(180deg, ${colors[index % colors.length]}, ${colors[index % colors.length]}cc)`,
+                      }}
+                      title={`${entry.name}: ${entry.count}`}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{entry.name}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
+              {hourStats
+                .slice()
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 4)
+                .map((entry) => (
+                  <div key={entry.name} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+                    <div className="font-medium text-foreground">{entry.name}</div>
+                    <div>{entry.count} agendamentos</div>
+                  </div>
                 ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="text-sm text-muted-foreground text-center py-8">
-            Nenhum dado disponível
+            </div>
           </div>
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground">Nenhum dado disponivel</div>
         )}
       </div>
     </MagicBentoCard>

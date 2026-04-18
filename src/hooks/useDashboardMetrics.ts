@@ -1,224 +1,329 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import {
+  buildMetricCountsFromRpcData,
+  calculateDashboardTrend,
+  EMPTY_METRICS,
+  getDashboardDateRanges,
+  getDashboardErrorMessage,
+  getSafeMetricCount,
+  type DashboardMetrics,
+  type DashboardMetricsRpcRow,
+  type MetricCounts,
+} from '@/lib/dashboardMetrics';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 
-export interface DashboardMetrics {
-  consultasHoje: number;
-  consultasMesAtual: number;
-  consultasMesAnterior: number;
-  pacientesCRM: number;
-  pacientesCRMMesAtual: number;
-  pacientesCRMMesAnterior: number;
-  prePatientes: number;
-  totalMedicos: number;
-  totalSecretarias: number;
-  mensagensHoje: number;
-  mensagensMesAtual: number;
-  followupsPendentes: number;
-  prontuariosCriados: number;
-  consultasIA: number;
-  loading: boolean;
-  error: string | null;
-}
+export type { DashboardMetrics } from '@/lib/dashboardMetrics';
 
 export function useDashboardMetrics() {
   const [metrics, setMetrics] = useState<DashboardMetrics>({
-    consultasHoje: 0,
-    consultasMesAtual: 0,
-    consultasMesAnterior: 0,
-    pacientesCRM: 0,
-    pacientesCRMMesAtual: 0,
-    pacientesCRMMesAnterior: 0,
-    prePatientes: 0,
-    totalMedicos: 0,
-    totalSecretarias: 0,
-    mensagensHoje: 0,
-    mensagensMesAtual: 0,
-    followupsPendentes: 0,
-    prontuariosCriados: 0,
-    consultasIA: 0,
+    ...EMPTY_METRICS,
     loading: true,
     error: null,
   });
 
   useEffect(() => {
-    fetchMetrics();
+    void fetchMetrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const safeCount = async (
+    queryPromise: Promise<{ count: number | null; error: { message: string } | null }>
+  ): Promise<number> => {
+    const { count, error } = await queryPromise;
+    return getSafeMetricCount(count, error);
+  };
+
+  const fetchCrmMetrics = async (): Promise<Pick<
+    MetricCounts,
+    | 'jornadaAgendado'
+    | 'jornadaAguardando'
+    | 'jornadaEmAtendimento'
+    | 'jornadaFinalizado'
+    | 'jornadaCancelado'
+    | 'automacaoPendentes'
+    | 'automacaoEnviadosHoje'
+    | 'automacaoFalhas'
+    | 'listaEsperaAtivos'
+    | 'listaEsperaOfertasPendentes'
+  >> => {
+    const { startTodayIso } = getDashboardDateRanges();
+    const supabase = await getSupabaseClient();
+
+    const [
+      jornadaAgendado,
+      jornadaAguardando,
+      jornadaEmAtendimento,
+      jornadaFinalizado,
+      jornadaCancelado,
+      automacaoPendentes,
+      automacaoEnviadosHoje,
+      automacaoFalhas,
+      listaEsperaAtivos,
+      listaEsperaOfertasPendentes,
+    ] = await Promise.all([
+      safeCount(
+        supabase
+          .from('appointments')
+          .select('*', { count: 'exact', head: true })
+          .eq('journey_stage', 'agendado')
+      ),
+      safeCount(
+        supabase
+          .from('appointments')
+          .select('*', { count: 'exact', head: true })
+          .eq('journey_stage', 'aguardando')
+      ),
+      safeCount(
+        supabase
+          .from('appointments')
+          .select('*', { count: 'exact', head: true })
+          .eq('journey_stage', 'em_atendimento')
+      ),
+      safeCount(
+        supabase
+          .from('appointments')
+          .select('*', { count: 'exact', head: true })
+          .eq('journey_stage', 'finalizado')
+      ),
+      safeCount(
+        supabase
+          .from('appointments')
+          .select('*', { count: 'exact', head: true })
+          .eq('journey_stage', 'cancelado')
+      ),
+      safeCount(
+        supabase
+          .from('appointment_automation_jobs')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending')
+      ),
+      safeCount(
+        supabase
+          .from('appointment_automation_jobs')
+          .select('*', { count: 'exact', head: true })
+          .in('status', ['sent', 'done'])
+          .gte('executed_at', startTodayIso)
+      ),
+      safeCount(
+        supabase
+          .from('appointment_automation_jobs')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'failed')
+      ),
+      safeCount(
+        supabase
+          .from('appointment_waitlist')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'active')
+      ),
+      safeCount(
+        supabase
+          .from('appointment_waitlist_offers')
+          .select('*', { count: 'exact', head: true })
+          .eq('offer_status', 'pending')
+      ),
+    ]);
+
+    return {
+      jornadaAgendado,
+      jornadaAguardando,
+      jornadaEmAtendimento,
+      jornadaFinalizado,
+      jornadaCancelado,
+      automacaoPendentes,
+      automacaoEnviadosHoje,
+      automacaoFalhas,
+      listaEsperaAtivos,
+      listaEsperaOfertasPendentes,
+    };
+  };
+
+  const buildMetricCountsFromRpc = async (): Promise<MetricCounts | null> => {
+    const supabase = await getSupabaseClient();
+    const { data: mainMetrics, error: mainError } =
+      await supabase.rpc<DashboardMetricsRpcRow[]>('get_dashboard_metrics');
+
+    if (mainError) {
+      console.warn('RPC get_dashboard_metrics nao encontrada, buscando dados manualmente');
+      return null;
+    }
+
+    if (!mainMetrics || mainMetrics.length === 0) {
+      return null;
+    }
+
+    const crmMetrics = await fetchCrmMetrics();
+    return buildMetricCountsFromRpcData(mainMetrics[0], crmMetrics);
+  };
+
+  const fetchMetricsManually = async (): Promise<MetricCounts> => {
+    const crmMetrics = await fetchCrmMetrics();
+    const supabase = await getSupabaseClient();
+    const {
+      startTodayIso,
+      endTodayIso,
+      startCurrentMonthIso,
+      startNextMonthIso,
+      startLastMonthIso,
+    } = getDashboardDateRanges();
+
+    const [
+      consultasHoje,
+      consultasMesAtual,
+      consultasMesAnterior,
+      pacientesCRM,
+      pacientesCRMMesAtual,
+      pacientesCRMMesAnterior,
+      prePatientes,
+      totalMedicos,
+      totalSecretarias,
+      mensagensHoje,
+      mensagensMesAtual,
+      followupsPendentes,
+      prontuariosCriados,
+      consultasIA,
+    ] = await Promise.all([
+      safeCount(
+        supabase
+          .from('appointments')
+          .select('*', { count: 'exact', head: true })
+          .gte('scheduled_at', startTodayIso)
+          .lt('scheduled_at', endTodayIso)
+      ),
+      safeCount(
+        supabase
+          .from('appointments')
+          .select('*', { count: 'exact', head: true })
+          .gte('scheduled_at', startCurrentMonthIso)
+          .lt('scheduled_at', startNextMonthIso)
+      ),
+      safeCount(
+        supabase
+          .from('appointments')
+          .select('*', { count: 'exact', head: true })
+          .gte('scheduled_at', startLastMonthIso)
+          .lt('scheduled_at', startCurrentMonthIso)
+      ),
+      safeCount(
+        supabase
+          .from('patients')
+          .select('*', { count: 'exact', head: true })
+      ),
+      safeCount(
+        supabase
+          .from('patients')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', startCurrentMonthIso)
+          .lt('created_at', startNextMonthIso)
+      ),
+      safeCount(
+        supabase
+          .from('patients')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', startLastMonthIso)
+          .lt('created_at', startCurrentMonthIso)
+      ),
+      safeCount(
+        supabase
+          .from('pre_patients')
+          .select('*', { count: 'exact', head: true })
+      ),
+      safeCount(
+        supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .eq('role', 'doctor')
+      ),
+      safeCount(
+        supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .eq('role', 'secretary')
+      ),
+      safeCount(
+        supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', startTodayIso)
+          .lt('created_at', endTodayIso)
+      ),
+      safeCount(
+        supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', startCurrentMonthIso)
+          .lt('created_at', startNextMonthIso)
+      ),
+      safeCount(
+        supabase
+          .from('follow_ups')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending')
+      ),
+      safeCount(
+        supabase
+          .from('medical_records')
+          .select('*', { count: 'exact', head: true })
+      ),
+      safeCount(
+        supabase
+          .from('agent_consultations')
+          .select('*', { count: 'exact', head: true })
+      ),
+    ]);
+
+    return {
+      consultasHoje,
+      consultasMesAtual,
+      consultasMesAnterior,
+      pacientesCRM,
+      pacientesCRMMesAtual,
+      pacientesCRMMesAnterior,
+      prePatientes,
+      totalMedicos,
+      totalSecretarias,
+      mensagensHoje,
+      mensagensMesAtual,
+      followupsPendentes,
+      prontuariosCriados,
+      consultasIA,
+      ...crmMetrics,
+    };
+  };
 
   const fetchMetrics = async () => {
     try {
-      setMetrics(prev => ({ ...prev, loading: true, error: null }));
+      setMetrics((prev) => ({ ...prev, loading: true, error: null }));
 
-      // Buscar métricas principais
-      const { data: mainMetrics, error: mainError } = await supabase.rpc(
-        'get_dashboard_metrics'
-      );
-
-      if (mainError) {
-        // Se a function não existir, buscar dados manualmente
-        console.warn('RPC get_dashboard_metrics não encontrada, buscando dados manualmente');
-        await fetchMetricsManually();
-        return;
-      }
-
-      if (mainMetrics && mainMetrics.length > 0) {
-        const data = mainMetrics[0];
+      const rpcMetrics = await buildMetricCountsFromRpc();
+      if (rpcMetrics) {
         setMetrics({
-          consultasHoje: data.consultas_hoje || 0,
-          consultasMesAtual: data.consultas_mes_atual || 0,
-          consultasMesAnterior: data.consultas_mes_anterior || 0,
-          pacientesCRM: data.total_pacientes_crm || 0,
-          pacientesCRMMesAtual: data.pacientes_mes_atual || 0,
-          pacientesCRMMesAnterior: data.pacientes_mes_anterior || 0,
-          prePatientes: data.total_pre_pacientes || 0,
-          totalMedicos: data.total_medicos || 0,
-          totalSecretarias: data.total_secretarias || 0,
-          mensagensHoje: data.mensagens_hoje || 0,
-          mensagensMesAtual: data.mensagens_mes_atual || 0,
-          followupsPendentes: data.followups_pendentes || 0,
-          prontuariosCriados: data.prontuarios_criados || 0,
-          consultasIA: data.consultas_ia || 0,
+          ...rpcMetrics,
           loading: false,
           error: null,
         });
+        return;
       }
-    } catch (err) {
-      console.error('Erro ao buscar métricas:', err);
-      // Tentar buscar manualmente
-      await fetchMetricsManually();
-    }
-  };
 
-  const fetchMetricsManually = async () => {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const firstDayCurrentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-      const firstDayLastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString();
-      const lastDayLastMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 0).toISOString();
-
-      // Buscar consultas hoje
-      const { count: consultasHoje } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact', head: true })
-        .gte('scheduled_at', today)
-        .lt('scheduled_at', new Date(new Date().setDate(new Date().getDate() + 1)).toISOString());
-
-      // Buscar consultas mês atual
-      const { count: consultasMesAtual } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact', head: true })
-        .gte('scheduled_at', firstDayCurrentMonth);
-
-      // Buscar consultas mês anterior
-      const { count: consultasMesAnterior } = await supabase
-        .from('appointments')
-        .select('*', { count: 'exact', head: true })
-        .gte('scheduled_at', firstDayLastMonth)
-        .lte('scheduled_at', lastDayLastMonth);
-
-      // Buscar total de pacientes CRM
-      const { count: pacientesCRM } = await supabase
-        .from('patients')
-        .select('*', { count: 'exact', head: true });
-
-      // Buscar pacientes criados mês atual
-      const { count: pacientesCRMMesAtual } = await supabase
-        .from('patients')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', firstDayCurrentMonth);
-
-      // Buscar pacientes criados mês anterior
-      const { count: pacientesCRMMesAnterior } = await supabase
-        .from('patients')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', firstDayLastMonth)
-        .lte('created_at', lastDayLastMonth);
-
-      // Buscar pré-pacientes
-      const { count: prePatientes } = await supabase
-        .from('pre_patients')
-        .select('*', { count: 'exact', head: true });
-
-      // Buscar médicos
-      const { count: totalMedicos } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'doctor');
-
-      // Buscar secretárias
-      const { count: totalSecretarias } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'secretary');
-
-      // Buscar mensagens hoje
-      const { count: mensagensHoje } = await supabase
-        .from('messages')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', today);
-
-      // Buscar mensagens mês atual
-      const { count: mensagensMesAtual } = await supabase
-        .from('messages')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', firstDayCurrentMonth);
-
-      // Buscar follow-ups pendentes
-      const { count: followupsPendentes } = await supabase
-        .from('follow_ups')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
-
-      // Buscar prontuários criados
-      const { count: prontuariosCriados } = await supabase
-        .from('medical_records')
-        .select('*', { count: 'exact', head: true });
-
-      // Buscar consultas de IA
-      const { count: consultasIA } = await supabase
-        .from('agent_consultations')
-        .select('*', { count: 'exact', head: true });
-
+      const fallbackMetrics = await fetchMetricsManually();
       setMetrics({
-        consultasHoje: consultasHoje || 0,
-        consultasMesAtual: consultasMesAtual || 0,
-        consultasMesAnterior: consultasMesAnterior || 0,
-        pacientesCRM: pacientesCRM || 0,
-        pacientesCRMMesAtual: pacientesCRMMesAtual || 0,
-        pacientesCRMMesAnterior: pacientesCRMMesAnterior || 0,
-        prePatientes: prePatientes || 0,
-        totalMedicos: totalMedicos || 0,
-        totalSecretarias: totalSecretarias || 0,
-        mensagensHoje: mensagensHoje || 0,
-        mensagensMesAtual: mensagensMesAtual || 0,
-        followupsPendentes: followupsPendentes || 0,
-        prontuariosCriados: prontuariosCriados || 0,
-        consultasIA: consultasIA || 0,
+        ...fallbackMetrics,
         loading: false,
         error: null,
       });
     } catch (err) {
-      console.error('Erro ao buscar métricas manualmente:', err);
-      setMetrics(prev => ({
+      console.error('Erro ao buscar metricas:', err);
+      setMetrics((prev) => ({
         ...prev,
         loading: false,
-        error: 'Erro ao carregar métricas. Tente novamente.',
+        error: getDashboardErrorMessage(err, 'Erro ao carregar metricas. Tente novamente.'),
       }));
     }
   };
 
-  const calculateTrend = (current: number, previous: number): string => {
-    if (previous === 0 && current === 0) return '0%';
-    if (previous === 0) return '+100%';
-    
-    const diff = ((current - previous) / previous) * 100;
-    const sign = diff >= 0 ? '+' : '';
-    return `${sign}${Math.round(diff)}%`;
-  };
-
   return {
     ...metrics,
-    calculateTrend,
+    calculateTrend: calculateDashboardTrend,
     refresh: fetchMetrics,
   };
 }
-

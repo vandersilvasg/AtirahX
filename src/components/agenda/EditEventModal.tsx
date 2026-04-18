@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Edit, Calendar, Clock, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import type { Appointment } from '@/components/agenda/types';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { webhookRequest } from '@/lib/webhookClient';
 import {
   AlertDialog,
@@ -19,15 +20,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-interface Appointment {
-  id: string;
-  patient_id: string;
-  doctor_id?: string;
-  scheduled_at: string;
-  status: string;
-  notes?: string;
-}
 
 interface Patient {
   id: string;
@@ -95,6 +87,7 @@ export function EditEventModal({
   const fetchPatients = async () => {
     setLoadingPatients(true);
     try {
+      const supabase = await getSupabaseClient();
       const { data, error } = await supabase
         .from('patients')
         .select('id, name, email, phone')
@@ -114,6 +107,7 @@ export function EditEventModal({
   const fetchDoctors = async () => {
     setLoadingDoctors(true);
     try {
+      const supabase = await getSupabaseClient();
       const { data: doctorsData, error: doctorsError } = await supabase
         .from('profiles')
         .select('id, name, specialization, email')
@@ -183,6 +177,7 @@ export function EditEventModal({
 
       // Buscar paciente pelo nome apÃ³s carregar a lista
       setTimeout(async () => {
+        const supabase = await getSupabaseClient();
         const { data: patientData } = await supabase
           .from('patients')
           .select('id')
@@ -198,6 +193,7 @@ export function EditEventModal({
       // Buscar mÃ©dico pelo calendar_id
       if (appointment.doctor_id) {
         setTimeout(async () => {
+          const supabase = await getSupabaseClient();
           const { data: calendarData } = await supabase
             .from('profile_calendars')
             .select('profile_id')

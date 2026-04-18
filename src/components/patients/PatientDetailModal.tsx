@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -6,33 +6,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { usePatientData } from '@/hooks/usePatientData';
-import { PatientOverview } from './PatientOverview';
-import { MedicalRecordsList } from './MedicalRecordsList';
-import { MedicalRecordForm } from './MedicalRecordForm';
-import { MedicalRecordViewModal } from './MedicalRecordViewModal';
-import { MedicalHistorySummary } from './MedicalHistorySummary';
-import { AnamnesisForm } from './AnamnesisForm';
-import { ClinicalDataForm } from './ClinicalDataForm';
-import { PatientTimeline } from './PatientTimeline';
-import { FileUploadZone } from './FileUploadZone';
-import { AttachmentCard } from './AttachmentCard';
-import { supabase } from '@/lib/supabaseClient';
-import { toast } from 'sonner';
-import { MedicalRecord } from '@/hooks/usePatientData';
-import { deleteFile, isAudioFile } from '@/lib/storageUtils';
+import { usePatientData, type AgentExam, type MedicalRecord } from '@/hooks/usePatientData';
 import {
-  User,
-  FileText,
-  Activity,
-  Clock,
-  Clipboard,
-  Upload,
-} from 'lucide-react';
+  getAgentExamTitle,
+  getExamOutputText,
+  getPatientDetailsErrorMessage,
+  getVisibleAttachments,
+} from '@/lib/patientDetails';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
+import { deleteFile } from '@/lib/storageUtils';
+import { toast } from 'sonner';
+import { Activity, Clock, Clipboard, FileText, Upload, User } from 'lucide-react';
+import { PatientAnamnesisTab } from './PatientAnamnesisTab';
+import { PatientAttachmentsTab } from './PatientAttachmentsTab';
+import { PatientClinicalDataTab } from './PatientClinicalDataTab';
+import { PatientMedicalRecordsTab } from './PatientMedicalRecordsTab';
+
+const PatientOverview = lazy(() =>
+  import('./PatientOverview').then((module) => ({ default: module.PatientOverview }))
+);
+const PatientTimeline = lazy(() =>
+  import('./PatientTimeline').then((module) => ({ default: module.PatientTimeline }))
+);
+const MedicalRecordViewModal = lazy(() =>
+  import('./MedicalRecordViewModal').then((module) => ({ default: module.MedicalRecordViewModal }))
+);
 
 interface PatientDetailModalProps {
   patientId: string | null;
@@ -46,7 +48,8 @@ export function PatientDetailModal({ patientId, open, onOpenChange }: PatientDet
   const [showAnamnesisForm, setShowAnamnesisForm] = useState(false);
   const [showClinicalDataForm, setShowClinicalDataForm] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
-  
+  const [selectedAgentExam, setSelectedAgentExam] = useState<AgentExam | null>(null);
+
   const {
     patient,
     medicalRecords,
@@ -61,37 +64,31 @@ export function PatientDetailModal({ patientId, open, onOpenChange }: PatientDet
     refetch,
   } = usePatientData(patientId);
 
-  // Filtrar anexos - remover arquivos de áudio (.mp3, etc)
-  const visibleAttachments = attachments.filter((att) => {
-    return !isAudioFile(att.file_name, att.file_path);
-  });
+  const visibleAttachments = getVisibleAttachments(attachments);
 
-  // Reset ao abrir/fechar modal
   useEffect(() => {
-    if (open) {
-      setActiveTab('overview');
-      setShowMedicalRecordForm(false);
-      setShowAnamnesisForm(false);
-      setShowClinicalDataForm(false);
-    }
+    if (!open) return;
+
+    setActiveTab('overview');
+    setShowMedicalRecordForm(false);
+    setShowAnamnesisForm(false);
+    setShowClinicalDataForm(false);
+    setSelectedAgentExam(null);
   }, [open, patientId]);
 
   const handleAvatarUpdate = async (url: string) => {
     if (!patientId) return;
 
     try {
-      const { error } = await supabase
-        .from('patients')
-        .update({ avatar_url: url })
-        .eq('id', patientId);
-
+      const supabase = await getSupabaseClient();
+      const { error } = await supabase.from('patients').update({ avatar_url: url }).eq('id', patientId);
       if (error) throw error;
 
       refetch();
       toast.success('Avatar atualizado!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao atualizar avatar:', error);
-      toast.error('Erro ao atualizar avatar');
+      toast.error(getPatientDetailsErrorMessage(error, 'Erro ao atualizar avatar'));
     }
   };
 
@@ -110,11 +107,11 @@ export function PatientDetailModal({ patientId, open, onOpenChange }: PatientDet
     refetch();
   };
 
-  const handleFileUploadSuccess = async (url: string, path: string) => {
+  const handleFileUploadSuccess = async (_url: string, path: string) => {
     if (!patientId) return;
 
     try {
-      // Registrar anexo no banco
+      const supabase = await getSupabaseClient();
       const { error } = await supabase.from('medical_attachments').insert({
         patient_id: patientId,
         file_name: path.split('/').pop() || 'unknown',
@@ -125,8 +122,9 @@ export function PatientDetailModal({ patientId, open, onOpenChange }: PatientDet
       if (error) throw error;
 
       refetch();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao registrar anexo:', error);
+      toast.error(getPatientDetailsErrorMessage(error, 'Erro ao registrar anexo'));
     }
   };
 
@@ -134,7 +132,7 @@ export function PatientDetailModal({ patientId, open, onOpenChange }: PatientDet
     if (!patientId) return;
 
     try {
-      // Buscar o arquivo para deletar do storage
+      const supabase = await getSupabaseClient();
       const { data: attachment } = await supabase
         .from('medical_attachments')
         .select('file_path')
@@ -142,40 +140,41 @@ export function PatientDetailModal({ patientId, open, onOpenChange }: PatientDet
         .single();
 
       if (attachment?.file_path) {
-        // Deletar do storage
         await deleteFile(attachment.file_path);
       }
 
-      // Deletar do banco de dados
-      const { error } = await supabase
-        .from('medical_attachments')
-        .delete()
-        .eq('id', attachmentId);
-
+      const { error } = await supabase.from('medical_attachments').delete().eq('id', attachmentId);
       if (error) throw error;
 
-      toast.success('Anexo excluído com sucesso!');
+      toast.success('Anexo excluido com sucesso!');
       refetch();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao excluir anexo:', error);
-      toast.error('Erro ao excluir anexo');
+      toast.error(getPatientDetailsErrorMessage(error, 'Erro ao excluir anexo'));
     }
   };
 
   if (!patientId) return null;
 
+  const tabFallback = (
+    <div className="space-y-4 p-6">
+      <Skeleton className="h-24 w-full" />
+      <Skeleton className="h-48 w-full" />
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl max-h-[90vh] p-0">
+      <DialogContent className="max-h-[90vh] max-w-7xl p-0">
         <DialogHeader className="px-6 pt-6">
-          <DialogTitle className="text-2xl">Prontuário do Paciente</DialogTitle>
+          <DialogTitle className="text-2xl">Prontuario do Paciente</DialogTitle>
           <DialogDescription>
             {loading ? 'Carregando dados...' : patient?.name || 'Detalhes completos'}
           </DialogDescription>
         </DialogHeader>
 
         {loading ? (
-          <div className="p-6 space-y-4">
+          <div className="space-y-4 p-6">
             <Skeleton className="h-32 w-full" />
             <Skeleton className="h-64 w-full" />
           </div>
@@ -186,45 +185,45 @@ export function PatientDetailModal({ patientId, open, onOpenChange }: PatientDet
         ) : patient ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
             <div className="border-b px-6">
-              <TabsList className="w-full justify-start h-auto p-0 bg-transparent">
+              <TabsList className="h-auto w-full justify-start bg-transparent p-0">
                 <TabsTrigger
                   value="overview"
-                  className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
+                  className="flex items-center gap-2 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
                 >
                   <User className="h-4 w-4" />
-                  Visão Geral
+                  Visao Geral
                 </TabsTrigger>
                 <TabsTrigger
                   value="medical-records"
-                  className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
+                  className="flex items-center gap-2 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
                 >
                   <FileText className="h-4 w-4" />
-                  Prontuários ({medicalRecords.length})
+                  Prontuarios ({medicalRecords.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="anamnesis"
-                  className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
+                  className="flex items-center gap-2 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
                 >
                   <Clipboard className="h-4 w-4" />
                   Anamnese ({anamnesis.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="clinical-data"
-                  className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
+                  className="flex items-center gap-2 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
                 >
                   <Activity className="h-4 w-4" />
-                  Dados Clínicos ({clinicalData.length})
+                  Dados Clinicos ({clinicalData.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="timeline"
-                  className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
+                  className="flex items-center gap-2 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
                 >
                   <Clock className="h-4 w-4" />
                   Linha do Tempo
                 </TabsTrigger>
                 <TabsTrigger
                   value="attachments"
-                  className="flex items-center gap-2 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
+                  className="flex items-center gap-2 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
                 >
                   <Upload className="h-4 w-4" />
                   Anexos ({visibleAttachments.length + agentExams.length})
@@ -232,273 +231,122 @@ export function PatientDetailModal({ patientId, open, onOpenChange }: PatientDet
               </TabsList>
             </div>
 
-            {/* Timeline Tab - Sem ScrollArea para permitir scroll horizontal */}
             {activeTab === 'timeline' ? (
-              <div className="h-[calc(90vh-200px)] flex flex-col overflow-hidden">
-                <div className="w-full h-full overflow-hidden">
+              <div className="flex h-[calc(90vh-200px)] flex-col overflow-hidden">
+                <div className="h-full w-full overflow-hidden">
                   <TabsContent value="timeline" className="mt-0 h-full">
-                    <PatientTimeline patientId={patientId} />
+                    <Suspense fallback={tabFallback}>
+                      <PatientTimeline patientId={patientId} />
+                    </Suspense>
                   </TabsContent>
                 </div>
               </div>
             ) : (
               <ScrollArea className="h-[calc(90vh-200px)]">
                 <div className="p-6">
-                  {/* Overview Tab */}
                   <TabsContent value="overview" className="mt-0">
-                    <PatientOverview
-                      patient={patient}
-                      doctors={doctors}
-                      medicalRecords={medicalRecords}
-                      clinicalData={clinicalData}
-                      examHistory={examHistory}
-                      anamnesis={anamnesis}
-                      onAvatarUpdate={handleAvatarUpdate}
-                      onPatientUpdate={refetch}
+                    <Suspense fallback={tabFallback}>
+                      <PatientOverview
+                        patient={patient}
+                        doctors={doctors}
+                        medicalRecords={medicalRecords}
+                        clinicalData={clinicalData}
+                        examHistory={examHistory}
+                        anamnesis={anamnesis}
+                        onAvatarUpdate={handleAvatarUpdate}
+                        onPatientUpdate={refetch}
+                      />
+                    </Suspense>
+                  </TabsContent>
+
+                  <TabsContent value="medical-records" className="mt-0">
+                    <PatientMedicalRecordsTab
+                      patientId={patientId}
+                      records={medicalRecords}
+                      showForm={showMedicalRecordForm}
+                      onAdd={() => setShowMedicalRecordForm(true)}
+                      onCancel={() => setShowMedicalRecordForm(false)}
+                      onSuccess={handleMedicalRecordSuccess}
+                      onView={(record) => setSelectedRecord(record)}
                     />
                   </TabsContent>
 
-                  {/* Medical Records Tab */}
-                  <TabsContent value="medical-records" className="mt-0">
-                   {showMedicalRecordForm ? (
-                     <MedicalRecordForm
-                       patientId={patientId}
-                       onSuccess={handleMedicalRecordSuccess}
-                       onCancel={() => setShowMedicalRecordForm(false)}
-                     />
-                   ) : (
-                     <>
-                       {/* Resumo do Histórico */}
-                       <MedicalHistorySummary records={medicalRecords} />
-                       
-                       {/* Lista de Prontuários */}
-                       <MedicalRecordsList
-                         records={medicalRecords}
-                         onAdd={() => setShowMedicalRecordForm(true)}
-                         onView={(record) => setSelectedRecord(record)}
-                       />
-                     </>
-                   )}
-                 </TabsContent>
-
-                {/* Anamnesis Tab */}
-                <TabsContent value="anamnesis" className="mt-0">
-                  {showAnamnesisForm ? (
-                    <AnamnesisForm
+                  <TabsContent value="anamnesis" className="mt-0">
+                    <PatientAnamnesisTab
                       patientId={patientId}
-                      onSuccess={handleAnamnesisSuccess}
+                      items={anamnesis}
+                      showForm={showAnamnesisForm}
+                      onCreate={() => setShowAnamnesisForm(true)}
                       onCancel={() => setShowAnamnesisForm(false)}
+                      onSuccess={handleAnamnesisSuccess}
                     />
-                  ) : anamnesis.length > 0 ? (
-                    <div className="space-y-4">
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => setShowAnamnesisForm(true)}
-                          className="text-sm text-primary hover:underline"
-                        >
-                          + Nova Anamnese
-                        </button>
-                      </div>
-                      {anamnesis.map((item) => (
-                        <div key={item.id} className="border rounded-lg p-4 space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(item.created_at).toLocaleDateString('pt-BR')}
-                            {item.doctor && ` - Dr(a). ${item.doctor.name}`}
-                          </p>
-                          {item.chief_complaint && (
-                            <p className="text-sm">
-                              <strong>Queixa:</strong> {item.chief_complaint}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <p className="text-muted-foreground mb-4">Nenhuma anamnese registrada</p>
-                      <button
-                        onClick={() => setShowAnamnesisForm(true)}
-                        className="text-primary hover:underline"
-                      >
-                        + Criar primeira anamnese
-                      </button>
-                    </div>
-                  )}
-                </TabsContent>
+                  </TabsContent>
 
-                {/* Clinical Data Tab */}
-                <TabsContent value="clinical-data" className="mt-0">
-                  {showClinicalDataForm ? (
-                    <ClinicalDataForm
+                  <TabsContent value="clinical-data" className="mt-0">
+                    <PatientClinicalDataTab
                       patientId={patientId}
-                      onSuccess={handleClinicalDataSuccess}
+                      items={clinicalData}
+                      showForm={showClinicalDataForm}
+                      onCreate={() => setShowClinicalDataForm(true)}
                       onCancel={() => setShowClinicalDataForm(false)}
+                      onSuccess={handleClinicalDataSuccess}
                     />
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => setShowClinicalDataForm(true)}
-                          className="text-sm text-primary hover:underline"
-                        >
-                          + Registrar Dados Clínicos
-                        </button>
-                      </div>
-                      {clinicalData.length > 0 ? (
-                        <div className="grid gap-4">
-                          {clinicalData.map((data) => (
-                            <div key={data.id} className="border rounded-lg p-4">
-                              <p className="text-sm text-muted-foreground mb-2">
-                                {new Date(data.measurement_date).toLocaleDateString('pt-BR')}
-                              </p>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                                {data.weight_kg && <p>Peso: {data.weight_kg}kg</p>}
-                                {data.height_cm && <p>Altura: {data.height_cm}cm</p>}
-                                {data.bmi && <p>IMC: {data.bmi}</p>}
-                                {data.blood_pressure_systolic && data.blood_pressure_diastolic && (
-                                  <p>
-                                    PA: {data.blood_pressure_systolic}/{data.blood_pressure_diastolic}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-12 text-muted-foreground">
-                          <p>Nenhum dado clínico registrado</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </TabsContent>
+                  </TabsContent>
 
-                {/* Attachments Tab */}
-                <TabsContent value="attachments" className="mt-0">
-                  <div className="space-y-6">
-                    <FileUploadZone
+                  <TabsContent value="attachments" className="mt-0">
+                    <PatientAttachmentsTab
                       patientId={patientId}
-                      folder="attachments"
+                      agentExams={agentExams}
+                      visibleAttachments={visibleAttachments}
                       onUploadSuccess={handleFileUploadSuccess}
+                      onDeleteAttachment={handleDeleteAttachment}
+                      onOpenAgentExam={setSelectedAgentExam}
                     />
-                    
-                    {/* Exames do Agent de Exames */}
-                    {agentExams.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold mb-4 flex items-center gap-2">
-                          <span className="text-orange-500">🔬</span>
-                          Exames Analisados pelo Agent ({agentExams.length})
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {agentExams.map((exam) => (
-                            <div
-                              key={exam.id}
-                              className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-gradient-to-br from-orange-500/5 to-amber-500/5"
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="p-2 rounded-lg bg-orange-500/10">
-                                    <FileText className="w-4 h-4 text-orange-500" />
-                                  </div>
-                                  <div>
-                                    <p className="font-medium text-sm">
-                                      {exam.exam_file_name || 'Exame Laboratorial'}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {exam.exam_type || 'Laboratory'}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              {exam.exam_result_summary && (
-                                <p className="text-xs text-muted-foreground line-clamp-3 mb-3">
-                                  {exam.exam_result_summary}
-                                </p>
-                              )}
-                              
-                              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                <span>
-                                  {new Date(exam.consultation_date).toLocaleDateString('pt-BR')}
-                                </span>
-                                {exam.doctor && (
-                                  <span className="font-medium">
-                                    Dr(a). {exam.doctor.name}
-                                  </span>
-                                )}
-                              </div>
-                              
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full mt-3"
-                                onClick={() => {
-                                  // Exibir o conteúdo completo do exame
-                                  const output = exam.consultation_output?.output || 'Análise não disponível';
-                                  const modal = document.createElement('div');
-                                  modal.innerHTML = `
-                                    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px;">
-                                      <div style="background: white; border-radius: 8px; max-width: 900px; max-height: 90vh; overflow-y: auto; padding: 24px; position: relative;">
-                                        <button onclick="this.closest('div').parentElement.remove()" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
-                                        <h2 style="margin-bottom: 16px; font-size: 20px; font-weight: bold;">📋 ${exam.exam_file_name || 'Análise de Exame'}</h2>
-                                        <pre style="white-space: pre-wrap; font-family: system-ui; font-size: 14px; line-height: 1.6;">${output}</pre>
-                                      </div>
-                                    </div>
-                                  `;
-                                  document.body.appendChild(modal);
-                                }}
-                              >
-                                Ver Análise Completa
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Arquivos Anexados Manualmente */}
-                    {visibleAttachments.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold mb-4">Arquivos Anexados ({visibleAttachments.length})</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {visibleAttachments.map((att) => (
-                            <AttachmentCard
-                              key={att.id}
-                              attachment={att}
-                              onDelete={handleDeleteAttachment}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Mensagem quando não há anexos */}
-                    {visibleAttachments.length === 0 && agentExams.length === 0 && (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <Upload className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p>Nenhum anexo ou exame analisado ainda</p>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
+                  </TabsContent>
                 </div>
               </ScrollArea>
             )}
           </Tabs>
-         ) : null}
-       </DialogContent>
+        ) : null}
+      </DialogContent>
 
-       {/* Modal de visualização de prontuário */}
-       {selectedRecord && (
-         <MedicalRecordViewModal
-           record={selectedRecord}
-           open={!!selectedRecord}
-           onOpenChange={(open) => {
-             if (!open) setSelectedRecord(null);
-           }}
-           patientName={patient?.name}
-         />
-       )}
-     </Dialog>
-   );
- }
+      {selectedRecord && (
+        <Suspense fallback={null}>
+          <MedicalRecordViewModal
+            record={selectedRecord}
+            open={!!selectedRecord}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) setSelectedRecord(null);
+            }}
+            patientName={patient?.name}
+          />
+        </Suspense>
+      )}
+
+      <Dialog
+        open={!!selectedAgentExam}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setSelectedAgentExam(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedAgentExam ? getAgentExamTitle(selectedAgentExam) : 'Analise de Exame'}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAgentExam?.consultation_date
+                ? new Date(selectedAgentExam.consultation_date).toLocaleDateString('pt-BR')
+                : 'Detalhes completos da analise'}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[65vh] pr-4">
+            <pre className="whitespace-pre-wrap text-sm leading-6">
+              {selectedAgentExam ? getExamOutputText(selectedAgentExam.consultation_output) : ''}
+            </pre>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  );
+}

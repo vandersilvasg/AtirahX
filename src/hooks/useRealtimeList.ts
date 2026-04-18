@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient, getSupabaseModule } from '@/lib/supabaseClientLoader';
 
 type OrderConfig = {
   column: string;
@@ -10,8 +10,10 @@ type OrderConfig = {
 type FilterConfig = {
   column: string;
   operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'ilike' | 'is' | 'in';
-  value: any;
+  value: unknown;
 };
+
+type RowRecord = Record<string, unknown>;
 
 export type UseRealtimeListOptions<T> = {
   table: string;
@@ -24,7 +26,52 @@ export type UseRealtimeListOptions<T> = {
   primaryKey?: keyof T & string;
 };
 
-export function useRealtimeList<T = any>(options: UseRealtimeListOptions<T>) {
+function compareValues(value: unknown, filterValue: unknown, operator: FilterConfig['operator']): boolean {
+  switch (operator) {
+    case 'eq':
+      return value === filterValue;
+    case 'neq':
+      return value !== filterValue;
+    case 'gt':
+      return value !== null && value !== undefined && filterValue !== null && filterValue !== undefined && value > filterValue;
+    case 'gte':
+      return value !== null && value !== undefined && filterValue !== null && filterValue !== undefined && value >= filterValue;
+    case 'lt':
+      return value !== null && value !== undefined && filterValue !== null && filterValue !== undefined && value < filterValue;
+    case 'lte':
+      return value !== null && value !== undefined && filterValue !== null && filterValue !== undefined && value <= filterValue;
+    case 'like':
+    case 'ilike':
+      return String(value ?? '').includes(String(filterValue ?? ''));
+    case 'is':
+      return value === filterValue;
+    case 'in':
+      return Array.isArray(filterValue) && filterValue.includes(value);
+    default:
+      return true;
+  }
+}
+
+function sortRows<T extends RowRecord>(rows: T[], order?: OrderConfig): T[] {
+  if (!order) {
+    return rows;
+  }
+
+  const { column, ascending = true, nullsFirst = false } = order;
+  rows.sort((a, b) => {
+    const av = a?.[column];
+    const bv = b?.[column];
+
+    if (av === bv) return 0;
+    if (av === null || av === undefined) return nullsFirst ? -1 : 1;
+    if (bv === null || bv === undefined) return nullsFirst ? 1 : -1;
+    return ascending ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+  });
+
+  return rows;
+}
+
+export function useRealtimeList<T extends RowRecord = RowRecord>(options: UseRealtimeListOptions<T>) {
   const {
     table,
     schema = 'public',
@@ -39,160 +86,145 @@ export function useRealtimeList<T = any>(options: UseRealtimeListOptions<T>) {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef<boolean>(false);
+  const orderKey = useMemo(() => JSON.stringify(order ?? null), [order]);
+  const filtersKey = useMemo(() => JSON.stringify(filters ?? []), [filters]);
+  const stableOrder = useMemo<OrderConfig | undefined>(() => {
+    if (orderKey === 'null') return undefined;
+    return JSON.parse(orderKey) as OrderConfig;
+  }, [orderKey]);
+  const stableFilters = useMemo<FilterConfig[] | undefined>(() => {
+    const parsed = JSON.parse(filtersKey) as FilterConfig[];
+    return parsed.length > 0 ? parsed : undefined;
+  }, [filtersKey]);
 
   useEffect(() => {
-    console.log(`[useRealtimeList] 🔄 Montando hook para tabela: ${table}`);
-    console.log(`[useRealtimeList] Parâmetros:`, { schema, select, order, limit, filters });
-    
+    console.log(`[useRealtimeList] Mounting hook for table: ${table}`);
+    console.log('[useRealtimeList] Parameters:', { schema, select, order: stableOrder, limit, filters: stableFilters });
+
     let isMounted = true;
     setLoading(true);
     setError(null);
 
     async function fetchInitial() {
-      console.log(`[useRealtimeList] 📡 Iniciando fetch para ${table}...`);
-      
-      let query = supabase.from(table).select(select, { count: 'exact', head: false });
+      console.log(`[useRealtimeList] Starting fetch for ${table}...`);
 
-      // Aplica filtros se fornecidos
-      if (filters && filters.length > 0) {
-        console.log(`[useRealtimeList] Aplicando ${filters.length} filtro(s)`);
-        filters.forEach((filter) => {
+      const supabase = await getSupabaseClient();
+      let query = supabase.from(table).select(select);
+
+      if (stableFilters && stableFilters.length > 0) {
+        console.log(`[useRealtimeList] Applying ${stableFilters.length} filter(s)`);
+        stableFilters.forEach((filter) => {
           query = query[filter.operator](filter.column, filter.value);
         });
       }
 
-      if (order) {
-        console.log(`[useRealtimeList] Ordenando por: ${order.column} (${order.ascending ? 'ASC' : 'DESC'})`);
-        query = query.order(order.column, {
-          ascending: order.ascending ?? true,
-          nullsFirst: order.nullsFirst ?? false,
+      if (stableOrder) {
+        console.log(`[useRealtimeList] Ordering by: ${stableOrder.column} (${stableOrder.ascending ? 'ASC' : 'DESC'})`);
+        query = query.order(stableOrder.column, {
+          ascending: stableOrder.ascending ?? true,
+          nullsFirst: stableOrder.nullsFirst ?? false,
         });
       }
 
       if (limit) {
-        console.log(`[useRealtimeList] Limitando a ${limit} registros`);
+        console.log(`[useRealtimeList] Limiting to ${limit} rows`);
         query = query.limit(limit);
       }
 
       const { data: rows, error: fetchError } = await query;
-      console.log(`[useRealtimeList] ✅ Fetch concluído para ${table}:`, { rowCount: rows?.length, error: fetchError });
-      
+      console.log(`[useRealtimeList] Fetch completed for ${table}:`, { rowCount: rows?.length, error: fetchError });
+
       if (!isMounted) {
-        console.log(`[useRealtimeList] ⚠️ Componente desmontado, ignorando resultado`);
+        console.log('[useRealtimeList] Component unmounted, ignoring result');
         return;
       }
-      
+
       if (fetchError) {
-        console.error(`[useRealtimeList] ❌ Erro ao buscar ${table}:`, fetchError);
+        console.error(`[useRealtimeList] Error fetching ${table}:`, fetchError);
         setError(fetchError.message);
         setData([]);
       } else {
-        console.log(`[useRealtimeList] ✅ ${rows?.length || 0} registros carregados para ${table}`);
+        console.log(`[useRealtimeList] Loaded ${rows?.length || 0} rows for ${table}`);
         setData((rows as unknown as T[]) ?? []);
       }
+
       setLoading(false);
       hasLoadedRef.current = true;
     }
 
-    fetchInitial();
+    void fetchInitial();
 
-    console.log(`[useRealtimeList] 📡 Criando canal realtime para ${table}`);
-    
-    const channel = supabase
-      .channel(`realtime:${schema}.${table}`)
-      .on('postgres_changes', { event: '*', schema, table }, (payload) => {
-        console.log(`[useRealtimeList] 🔔 Mudança detectada em ${table}:`, payload.eventType);
-        setData((current) => {
-          const next = [...current];
-          const pk = primaryKey as string;
+    console.log(`[useRealtimeList] Creating realtime channel for ${table}`);
+    let channelCleanup = () => {};
 
-          // Função auxiliar para verificar se um item passa pelos filtros
-          const matchesFilters = (item: any) => {
-            if (!filters || filters.length === 0) return true;
-            return filters.every((filter) => {
-              const value = item?.[filter.column];
-              switch (filter.operator) {
-                case 'eq':
-                  return value === filter.value;
-                case 'neq':
-                  return value !== filter.value;
-                case 'gt':
-                  return value > filter.value;
-                case 'gte':
-                  return value >= filter.value;
-                case 'lt':
-                  return value < filter.value;
-                case 'lte':
-                  return value <= filter.value;
-                case 'like':
-                case 'ilike':
-                  return String(value).includes(String(filter.value));
-                case 'is':
-                  return value === filter.value;
-                case 'in':
-                  return Array.isArray(filter.value) && filter.value.includes(value);
-                default:
-                  return true;
-              }
-            });
-          };
+    void (async () => {
+      const supabaseModule = await getSupabaseModule();
+      if (!isMounted) {
+        return;
+      }
 
-          if (payload.eventType === 'INSERT') {
-            // Só adiciona se passar pelos filtros
-            if (matchesFilters(payload.new)) {
-              next.unshift(payload.new as T);
-            }
-          } else if (payload.eventType === 'UPDATE') {
-            const index = next.findIndex((row: any) => row?.[pk] === (payload.new as any)?.[pk]);
-            if (matchesFilters(payload.new)) {
-              // Se passar pelos filtros, atualiza ou adiciona
-              if (index !== -1) {
-                next[index] = payload.new as T;
-              } else {
+      const channel = supabaseModule.supabase
+        .channel(`realtime:${schema}.${table}`)
+        .on('postgres_changes', { event: '*', schema, table }, (payload) => {
+          console.log(`[useRealtimeList] Change detected in ${table}:`, payload.eventType);
+
+          setData((current) => {
+            const next = [...current];
+            const pk = primaryKey as string;
+
+            const matchesFilters = (item: RowRecord | null | undefined) => {
+              if (!stableFilters || stableFilters.length === 0) return true;
+              return stableFilters.every((filter) => {
+                const value = item?.[filter.column];
+                return compareValues(value, filter.value, filter.operator);
+              });
+            };
+
+            if (payload.eventType === 'INSERT') {
+              if (matchesFilters(payload.new)) {
                 next.unshift(payload.new as T);
               }
-            } else {
-              // Se não passar pelos filtros, remove se existir
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedRow = payload.new as T;
+              const index = next.findIndex((row) => row?.[pk] === updatedRow?.[pk]);
+
+              if (matchesFilters(payload.new)) {
+                if (index !== -1) {
+                  next[index] = updatedRow;
+                } else {
+                  next.unshift(updatedRow);
+                }
+              } else if (index !== -1) {
+                next.splice(index, 1);
+              }
+            } else if (payload.eventType === 'DELETE') {
+              const deletedRow = payload.old as Partial<T> | null;
+              const index = next.findIndex((row) => row?.[pk] === deletedRow?.[pk]);
               if (index !== -1) {
                 next.splice(index, 1);
               }
             }
-          } else if (payload.eventType === 'DELETE') {
-            const index = next.findIndex((row: any) => row?.[pk] === (payload.old as any)?.[pk]);
-            if (index !== -1) {
-              next.splice(index, 1);
-            }
-          }
 
-          if (order) {
-            const { column, ascending = true } = order;
-            next.sort((a: any, b: any) => {
-              const av = a?.[column];
-              const bv = b?.[column];
-              if (av === bv) return 0;
-              if (av === null || av === undefined) return order.nullsFirst ? -1 : 1;
-              if (bv === null || bv === undefined) return order.nullsFirst ? 1 : -1;
-              return ascending ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
-            });
-          }
-
-          return next;
+            return sortRows(next, stableOrder);
+          });
+        })
+        .subscribe((status) => {
+          console.log(`[useRealtimeList] Channel status for ${table}:`, status);
         });
-      })
-      .subscribe((status) => {
-        console.log(`[useRealtimeList] Status do canal ${table}:`, status);
-      });
+
+      channelCleanup = () => {
+        supabaseModule.supabase.removeChannel(channel);
+      };
+    })();
 
     return () => {
-      console.log(`[useRealtimeList] 🧹 Limpando hook para ${table}`);
+      console.log(`[useRealtimeList] Cleaning up hook for ${table}`);
       isMounted = false;
-      supabase.removeChannel(channel);
+      channelCleanup();
     };
-  }, [table, schema, select, order?.column, order?.ascending, order?.nullsFirst, limit, primaryKey, filters]);
+  }, [table, schema, select, limit, primaryKey, orderKey, filtersKey, stableOrder, stableFilters]);
 
   const count = useMemo(() => data.length, [data]);
 
   return { data, setData, loading, error, count, hasLoaded: hasLoadedRef.current } as const;
 }
-
-

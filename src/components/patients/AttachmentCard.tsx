@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -32,20 +32,13 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
   const [showFullView, setShowFullView] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Verificar extensão tanto no file_name quanto no file_path (URLs externas)
   const isImage = isImageFile(attachment.file_name, attachment.file_path);
   const isPdf = isPdfFile(attachment.file_name, attachment.file_path);
 
-  // Carregar URL assinada ao montar
-  useEffect(() => {
-    loadSignedUrl();
-  }, [attachment.file_path]);
-
-  const loadSignedUrl = async () => {
+  const loadSignedUrl = useCallback(async () => {
     setLoadingUrl(true);
     try {
-      // getFileUrl detecta automaticamente se é URL externa ou caminho do storage
-      const url = await getFileUrl(attachment.file_path, 3600); // 1 hora
+      const url = await getFileUrl(attachment.file_path, 3600);
       if (url) {
         setPreviewUrl(url);
       }
@@ -54,7 +47,11 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
     } finally {
       setLoadingUrl(false);
     }
-  };
+  }, [attachment.file_path]);
+
+  useEffect(() => {
+    void loadSignedUrl();
+  }, [loadSignedUrl]);
 
   const handleDownload = async () => {
     if (!previewUrl) {
@@ -66,13 +63,13 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
       const response = await fetch(previewUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = attachment.file_name;
-      document.body.appendChild(a);
-      a.click();
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = attachment.file_name;
+      document.body.appendChild(anchor);
+      anchor.click();
       window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      document.body.removeChild(anchor);
       toast.success('Download iniciado!');
     } catch (error) {
       console.error('Erro ao fazer download:', error);
@@ -82,7 +79,6 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
 
   const handleDelete = async () => {
     if (!onDelete) return;
-    
     if (!confirm('Tem certeza que deseja excluir este anexo?')) return;
 
     setIsDeleting(true);
@@ -103,7 +99,6 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
     <>
       <Card className="overflow-hidden hover:shadow-lg transition-shadow">
         <div className="flex flex-col h-full">
-          {/* Área de Preview */}
           <div className="relative bg-muted/30 aspect-video flex items-center justify-center border-b">
             {loadingUrl ? (
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -130,7 +125,6 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
             )}
           </div>
 
-          {/* Informações do Arquivo */}
           <div className="p-4 flex-1 flex flex-col">
             <div className="flex-1">
               <h4 className="text-sm font-medium truncate" title={attachment.file_name}>
@@ -153,7 +147,6 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
               </div>
             </div>
 
-            {/* Ações */}
             <div className="flex gap-2 mt-4">
               <Button
                 variant="outline"
@@ -195,28 +188,24 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
         </div>
       </Card>
 
-      {/* Modal de Visualização Completa */}
       <Dialog open={showFullView} onOpenChange={setShowFullView}>
         <DialogContent className="max-w-5xl max-h-[90vh] p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle className="text-lg">{attachment.file_name}</DialogTitle>
             <DialogDescription>
-              Enviado em {new Date(attachment.created_at).toLocaleDateString('pt-BR', {
+              Enviado em{' '}
+              {new Date(attachment.created_at).toLocaleDateString('pt-BR', {
                 day: '2-digit',
                 month: 'long',
                 year: 'numeric',
               })}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="w-full h-[calc(90vh-140px)] overflow-auto bg-muted/10">
             {previewUrl && isImage ? (
               <div className="flex items-center justify-center p-4 h-full">
-                <img
-                  src={previewUrl}
-                  alt={attachment.file_name}
-                  className="max-w-full max-h-full object-contain"
-                />
+                <img src={previewUrl} alt={attachment.file_name} className="max-w-full max-h-full object-contain" />
               </div>
             ) : previewUrl && isPdf ? (
               <iframe
@@ -228,16 +217,8 @@ export function AttachmentCard({ attachment, onDelete }: AttachmentCardProps) {
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   {getFileIcon()}
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Preview não disponível
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownload}
-                    className="mt-4"
-                    disabled={!previewUrl}
-                  >
+                  <p className="text-sm text-muted-foreground mt-2">Preview não disponível</p>
+                  <Button variant="outline" size="sm" onClick={handleDownload} className="mt-4" disabled={!previewUrl}>
                     <Download className="h-4 w-4 mr-2" />
                     Fazer Download
                   </Button>

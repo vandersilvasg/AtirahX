@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -11,6 +11,14 @@ interface AnamnesisFormProps {
   patientId: string;
   onSuccess?: () => void;
   onCancel?: () => void;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
 }
 
 export function AnamnesisForm({ patientId, onSuccess, onCancel }: AnamnesisFormProps) {
@@ -38,6 +46,7 @@ export function AnamnesisForm({ patientId, onSuccess, onCancel }: AnamnesisFormP
     setLoading(true);
 
     try {
+      const supabase = await getSupabaseClient();
       const { error } = await supabase.from('anamnesis').insert({
         patient_id: patientId,
         doctor_id: user.id,
@@ -55,9 +64,9 @@ export function AnamnesisForm({ patientId, onSuccess, onCancel }: AnamnesisFormP
 
       toast.success('Anamnese salva com sucesso!');
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao salvar anamnese:', error);
-      toast.error(error.message || 'Erro ao salvar anamnese');
+      toast.error(getErrorMessage(error, 'Erro ao salvar anamnese'));
     } finally {
       setLoading(false);
     }

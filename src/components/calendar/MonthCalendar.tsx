@@ -1,19 +1,11 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, GripVertical } from 'lucide-react';
+import type { Appointment } from '@/components/agenda/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 // TEMPORARIAMENTE DESABILITADO: DnD até resolver conflito de versões do React
 // import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 // import { CSS } from '@dnd-kit/utilities';
-
-interface Appointment {
-  id: string;
-  patient_id: string;
-  doctor_id?: string;
-  scheduled_at: string;
-  status: string;
-  notes?: string;
-}
 
 interface MonthCalendarProps {
   appointments: Appointment[];
@@ -340,4 +332,3 @@ export function MonthCalendar({ appointments, onDayClick, onAppointmentClick, on
     // </DndContext>
   );
 }
-

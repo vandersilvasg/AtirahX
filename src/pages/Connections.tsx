@@ -3,7 +3,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { MagicBentoCard } from '@/components/bento/MagicBento';
 import { Button } from '@/components/ui/button';
 import { Link2, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import { supabase, testConnection } from '@/lib/supabaseClient';
+import { getSupabaseModule } from '@/lib/supabaseClientLoader';
 
 export default function Connections() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
@@ -12,6 +12,7 @@ export default function Connections() {
   const runTest = async () => {
     setStatus('loading');
     setMessage('');
+    const { testConnection } = await getSupabaseModule();
     const { data, error } = await testConnection();
     if (error) {
       setStatus('error');

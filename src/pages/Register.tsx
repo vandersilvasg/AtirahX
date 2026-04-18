@@ -6,16 +6,22 @@ import { Label } from '@/components/ui/label';
 import { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
 import { MagicBentoCard } from '@/components/bento/MagicBento';
 import Particles from '@/components/backgrounds/Particles';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
+
+const REGISTER_ROLES = ['owner', 'doctor', 'secretary'] as const;
+
+function isRegisterRole(value: string): value is (typeof REGISTER_ROLES)[number] {
+  return REGISTER_ROLES.includes(value as (typeof REGISTER_ROLES)[number]);
+}
 
 export default function Register() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'owner' | 'doctor' | 'secretary'>('doctor');
+  const [role, setRole] = useState<(typeof REGISTER_ROLES)[number]>('doctor');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -24,14 +30,12 @@ export default function Register() {
     setError('');
     setLoading(true);
 
+    const supabase = await getSupabaseClient();
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          name,
-          role,
-        },
+        data: { name, role },
         emailRedirectTo: window.location.origin + '/login',
       },
     });
@@ -48,14 +52,7 @@ export default function Register() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-background p-4 relative overflow-hidden">
       <div className="absolute inset-0 z-0 pointer-events-none opacity-30">
-        <Particles
-          particleCount={100}
-          particleColor="#5227FF"
-          particleSize={3}
-          speed={0.3}
-          connectionDistance={150}
-          showConnections={true}
-        />
+        <Particles particleCount={100} particleColor="#5227FF" particleSize={3} speed={0.3} connectionDistance={150} showConnections={true} />
       </div>
       <div className="w-full max-w-md space-y-8 relative z-10">
         <div className="flex flex-col items-center gap-4">
@@ -100,7 +97,12 @@ export default function Register() {
                   id="role"
                   className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={role}
-                  onChange={(e) => setRole(e.target.value as any)}
+                  onChange={(e) => {
+                    const nextRole = e.target.value;
+                    if (isRegisterRole(nextRole)) {
+                      setRole(nextRole);
+                    }
+                  }}
                 >
                   <option value="owner">Dono</option>
                   <option value="doctor">Médico</option>
@@ -122,5 +124,3 @@ export default function Register() {
     </div>
   );
 }
-
-

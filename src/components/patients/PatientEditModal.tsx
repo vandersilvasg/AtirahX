@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { toast } from 'sonner';
 import { Patient } from '@/hooks/usePatientData';
 import { Loader2 } from 'lucide-react';
@@ -30,6 +30,29 @@ interface PatientEditModalProps {
   onSuccess?: () => void;
 }
 
+type PatientFormData = {
+  name: string;
+  email: string;
+  phone: string;
+  cpf: string;
+  birth_date: string;
+  gender: string;
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  health_insurance: string;
+  notes: string;
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function PatientEditModal({
   patient,
   open,
@@ -37,7 +60,7 @@ export function PatientEditModal({
   onSuccess,
 }: PatientEditModalProps) {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<PatientFormData>({
     name: '',
     email: '',
     phone: '',
@@ -98,6 +121,7 @@ export function PatientEditModal({
         updated_at: new Date().toISOString(),
       };
 
+      const supabase = await getSupabaseClient();
       const { error } = await supabase
         .from('patients')
         .update(updateData)
@@ -108,15 +132,15 @@ export function PatientEditModal({
       toast.success('Paciente atualizado com sucesso!');
       onSuccess?.();
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao atualizar paciente:', error);
-      toast.error('Erro ao atualizar paciente: ' + error.message);
+      toast.error(`Erro ao atualizar paciente: ${getErrorMessage(error, 'Erro desconhecido')}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof PatientFormData, value: string) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,

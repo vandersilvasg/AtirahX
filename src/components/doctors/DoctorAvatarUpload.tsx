@@ -36,6 +36,11 @@ export function DoctorAvatarUpload({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!doctorId || !doctorId.trim()) {
+      toast.error('Nao foi possivel identificar o perfil para salvar a foto');
+      return;
+    }
+
     // Validar tipo
     if (!file.type.startsWith('image/')) {
       toast.error('Por favor, selecione uma imagem');
