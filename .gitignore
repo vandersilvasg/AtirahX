@@ -16,6 +16,8 @@ dist-ssr
 !.env.example
 !docs/setup/TEMPLATE_ENV_LOCAL.txt
 supabase/.temp/
+combined_migrations.sql
+combined_seeds.sql
 
 # Editor directories and files
 .vscode/*
