@@ -17,6 +17,7 @@ const supabaseMocks = vi.hoisted(() => {
   const channelOn = vi.fn();
   const channelSubscribe = vi.fn();
   const removeChannel = vi.fn();
+  const realtimeHandlers = new Map<string, (payload?: Record<string, unknown>) => void>();
 
   return {
     patientsSelect,
@@ -25,6 +26,7 @@ const supabaseMocks = vi.hoisted(() => {
     channelOn,
     channelSubscribe,
     removeChannel,
+    realtimeHandlers,
   };
 });
 
@@ -64,9 +66,11 @@ function createWrapper() {
     },
   });
 
-  return function Wrapper({ children }: { children: ReactNode }) {
+  function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
+  }
+
+  return { Wrapper, queryClient };
 }
 
 function createDoctorQuery(profile: { id: string; name: string; specialization?: string | null } | null) {
@@ -109,6 +113,7 @@ function createDoctorQuery(profile: { id: string; name: string; specialization?:
 describe('useWhatsAppConversationData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    supabaseMocks.realtimeHandlers.clear();
 
     medxMocks.listMedxSessions.mockResolvedValue([
       {
@@ -137,10 +142,14 @@ describe('useWhatsAppConversationData', () => {
       createDoctorQuery({ id: 'doc-1', name: 'Dr. Silva', specialization: 'Cardio' })
     );
 
-    supabaseMocks.channelOn.mockImplementation(() => ({
-      on: supabaseMocks.channelOn,
-      subscribe: supabaseMocks.channelSubscribe,
-    }));
+    supabaseMocks.channelOn.mockImplementation((_type, config, callback) => {
+      const key = `${config.table}:${config.event}`;
+      supabaseMocks.realtimeHandlers.set(key, callback);
+      return {
+        on: supabaseMocks.channelOn,
+        subscribe: supabaseMocks.channelSubscribe,
+      };
+    });
 
     supabaseMocks.channelSubscribe.mockReturnValue({ id: 'channel-1' });
   });
@@ -156,7 +165,7 @@ describe('useWhatsAppConversationData', () => {
           setSelectedSessionId,
           tab: 'crm',
         }),
-      { wrapper: createWrapper() }
+      { wrapper: createWrapper().Wrapper }
     );
 
     await waitFor(() => {
@@ -192,11 +201,45 @@ describe('useWhatsAppConversationData', () => {
           setSelectedSessionId,
           tab: 'all',
         }),
-      { wrapper: createWrapper() }
+      { wrapper: createWrapper().Wrapper }
     );
 
     await waitFor(() => {
       expect(setSelectedSessionId).toHaveBeenCalledWith('patient-1');
+    });
+  });
+
+  it('invalidates conversation queries when realtime events arrive for medx_history and contacts', async () => {
+    const setSelectedSessionId = vi.fn();
+    const { Wrapper, queryClient } = createWrapper();
+    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(
+      () =>
+        useWhatsAppConversationData({
+          search: '',
+          selectedSessionId: 'patient-1',
+          setSelectedSessionId,
+          tab: 'all',
+        }),
+      { wrapper: Wrapper }
+    );
+
+    await waitFor(() => {
+      expect(supabaseMocks.realtimeHandlers.size).toBeGreaterThanOrEqual(4);
+    });
+
+    supabaseMocks.realtimeHandlers.get('medx_history:INSERT')?.({
+      new: { session_id: 'patient-1' },
+    });
+    supabaseMocks.realtimeHandlers.get('patients:*')?.({});
+    supabaseMocks.realtimeHandlers.get('pre_patients:*')?.({});
+
+    await waitFor(() => {
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['medx_sessions'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['medx_messages', 'patient-1'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['patients_min'] });
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['pre_patients_min'] });
     });
   });
 });
