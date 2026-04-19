@@ -1,0 +1,15 @@
+-- Descrição: Seed descontinuado para chave do Gemini no banco
+-- Data: 2026-03-03
+-- Autor: Sistema MedX
+--
+-- IMPORTANTE:
+-- A chave do Gemini NÃO deve mais ser salva em public.system_settings.
+-- O frontend agora usa a Edge Function "gemini-analyzer" com segredo em ambiente seguro.
+--
+-- Configure o segredo via Supabase CLI:
+-- supabase secrets set GEMINI_API_KEY="sua-chave-aqui"
+--
+-- Opcional: lista de modelos em ordem de tentativa
+-- supabase secrets set GEMINI_MODEL_LIST="gemini-2.0-flash,gemini-1.5-flash-latest,gemini-1.5-pro"
+--
+-- Este arquivo é mantido apenas para compatibilidade com ordem de seeds.

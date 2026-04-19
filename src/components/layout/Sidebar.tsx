@@ -1,0 +1,229 @@
+import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  BarChart3,
+  Calendar,
+  ClipboardList,
+  MessageSquare,
+  Users,
+  MessageCircle,
+  Video,
+  Plug,
+  Settings,
+  LogOut,
+  Building2,
+  FileSpreadsheet,
+  HandCoins,
+  UserCircle,
+  SquareKanban,
+  type LucideIcon,
+} from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
+type MenuChild = {
+  path: string;
+  label: string;
+};
+
+type MenuItem = {
+  path?: string;
+  icon: LucideIcon;
+  label: string;
+  roles: string[];
+  children?: MenuChild[];
+};
+
+export const Sidebar = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const menuItems: MenuItem[] = [
+    {
+      path: '/dashboard',
+      icon: BarChart3,
+      label: 'Crescimento da Clinica',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/whatsapp',
+      icon: MessageCircle,
+      label: 'Conversas',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/financeiro',
+      icon: HandCoins,
+      label: 'Financeiro',
+      roles: ['owner'],
+    },
+    {
+      icon: SquareKanban,
+      label: 'Leads & Pacientes',
+      roles: ['owner', 'secretary'],
+      children: [
+        { path: '/crm', label: 'Pipeline' },
+        { path: '/patients', label: 'Pacientes CRM' },
+        { path: '/pre-patients', label: 'Pre-pacientes' },
+      ],
+    },
+    {
+      path: '/agenda',
+      icon: Calendar,
+      label: 'Agenda Inteligente',
+      roles: ['owner', 'doctor', 'secretary'],
+    },
+    {
+      path: '/recuperacao-pacientes',
+      icon: ClipboardList,
+      label: 'Recuperacao de Pacientes',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/automacao-inteligente',
+      icon: MessageSquare,
+      label: 'Automacao Inteligente',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/campanhas-origem',
+      icon: HandCoins,
+      label: 'Campanhas & Origem',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/convenios',
+      icon: Building2,
+      label: 'Convenios',
+      roles: ['doctor'],
+    },
+    {
+      path: '/doctors-insurance',
+      icon: FileSpreadsheet,
+      label: 'Convenios & Cobertura',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/teleconsulta',
+      icon: Video,
+      label: 'Teleconsulta',
+      roles: ['owner', 'doctor'],
+    },
+    {
+      path: '/integration',
+      icon: Plug,
+      label: 'Integracoes',
+      roles: ['owner'],
+    },
+    {
+      path: '/clinic-info',
+      icon: Settings,
+      label: 'Configuracoes da Clinica',
+      roles: ['owner'],
+    },
+    {
+      path: '/users',
+      icon: Settings,
+      label: 'Usuarios',
+      roles: ['owner'],
+    },
+    {
+      path: '/profile',
+      icon: UserCircle,
+      label: 'Meu Perfil',
+      roles: ['owner', 'doctor', 'secretary'],
+    },
+  ];
+
+  const visibleItems = menuItems.filter((item) => item.roles.includes(user?.role || ''));
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      navigate('/login', { replace: true });
+    }
+  };
+
+  return (
+    <div className="h-screen w-64 bg-sidebar-background border-r border-sidebar-border flex flex-col overflow-hidden">
+      <div className="p-6 flex justify-center flex-shrink-0">
+        <img src="/logo-interno.png" alt="MedX" className="w-32 h-32 object-contain" />
+      </div>
+
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {visibleItems.map((item) =>
+          item.children ? (
+            <div key={item.label} className="space-y-1">
+              <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-sidebar-foreground">
+                <item.icon className="w-5 h-5" />
+                <span className="text-sm font-medium">{item.label}</span>
+              </div>
+              <div className="ml-6 space-y-1">
+                {item.children.map((child) => (
+                  <NavLink
+                    key={child.path}
+                    to={child.path}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${
+                        isActive
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground/90 hover:bg-sidebar-accent/50'
+                      }`
+                    }
+                  >
+                    <span className="text-xs font-medium">{child.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <NavLink
+              key={item.path}
+              to={item.path || '/'}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                  isActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
+                }`
+              }
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="text-sm font-medium">{item.label}</span>
+            </NavLink>
+          )
+        )}
+      </nav>
+
+      <div className="p-4 border-t border-sidebar-border flex-shrink-0">
+        <NavLink
+          to="/profile"
+          className="flex items-center gap-3 hover:bg-sidebar-accent/50 rounded-lg p-2 -m-2 transition-colors"
+        >
+          <Avatar className="w-10 h-10">
+            <AvatarImage src={user?.avatar_url} alt={user?.name} />
+            <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
+              {user?.name ? user.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() : 'U'}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-sidebar-foreground">{user?.name ?? ''}</p>
+            <p className="text-xs text-muted-foreground capitalize">{user?.role ?? ''}</p>
+          </div>
+        </NavLink>
+      </div>
+
+      <div className="p-4 border-t border-sidebar-border flex-shrink-0">
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent/50"
+          onClick={handleLogout}
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="text-sm font-medium">Sair</span>
+        </Button>
+      </div>
+    </div>
+  );
+};
