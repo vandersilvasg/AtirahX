@@ -4,6 +4,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PatientsTable } from '@/components/patients/PatientsTable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { usePatientsManagement } from '@/hooks/usePatientsManagement';
 import { CalendarClock, Plus, Search, ShieldCheck, UserPlus, Users } from 'lucide-react';
 
@@ -21,6 +22,7 @@ const PatientsCreateDialog = lazy(() =>
 
 export default function Patients() {
   const {
+    activeSegment,
     error,
     filteredPatients,
     formData,
@@ -31,6 +33,7 @@ export default function Patients() {
     patientInsights,
     searchTerm,
     selectedPatientId,
+    setActiveSegment,
     setFormData,
     setIsCreateDialogOpen,
     setSearchTerm,
@@ -54,14 +57,43 @@ export default function Patients() {
         </div>
 
         <MagicBentoCard contentClassName="p-4">
-          <div className="flex items-center gap-2">
-            <Search className="h-5 w-5 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, email, telefone ou CPF..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="border-0 shadow-none focus-visible:ring-0"
-            />
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Search className="h-5 w-5 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome, email, telefone ou CPF..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="border-0 shadow-none focus-visible:ring-0"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Triagem rapida da base para contato, agenda e entrada recente.
+              </p>
+              <ToggleGroup
+                type="single"
+                value={activeSegment}
+                onValueChange={(value) => {
+                  if (value) setActiveSegment(value as typeof activeSegment);
+                }}
+                className="flex flex-wrap justify-start md:justify-end"
+              >
+                <ToggleGroupItem value="all" aria-label="Mostrar toda a base">
+                  Todos
+                </ToggleGroupItem>
+                <ToggleGroupItem value="reachable" aria-label="Mostrar pacientes com contato">
+                  Com contato
+                </ToggleGroupItem>
+                <ToggleGroupItem value="scheduled" aria-label="Mostrar pacientes com agenda">
+                  Com agenda
+                </ToggleGroupItem>
+                <ToggleGroupItem value="recent" aria-label="Mostrar pacientes recentes">
+                  Recentes
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
         </MagicBentoCard>
 

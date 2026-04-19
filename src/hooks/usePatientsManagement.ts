@@ -37,6 +37,8 @@ export type PatientInsights = {
   recentPatients: number;
 };
 
+export type PatientSegment = 'all' | 'reachable' | 'scheduled' | 'recent';
+
 const EMPTY_FORM: PatientFormData = {
   name: '',
   email: '',
@@ -107,6 +109,16 @@ export function getPatientInsights(patients: Patient[], filteredPatients: Patien
   };
 }
 
+export function matchesPatientSegment(patient: Patient, segment: PatientSegment) {
+  if (segment === 'all') return true;
+  if (segment === 'reachable') return Boolean(patient.email || patient.phone);
+  if (segment === 'scheduled') {
+    return Boolean(patient.next_appointment_date && isValidDate(patient.next_appointment_date));
+  }
+  if (!isValidDate(patient.created_at)) return false;
+  return Date.now() - new Date(patient.created_at).getTime() <= 1000 * 60 * 60 * 24 * 30;
+}
+
 export function formatWhatsappToDDDNumber(raw?: string | null) {
   if (!raw) return '-';
   const atIdx = raw.indexOf('@');
@@ -127,6 +139,7 @@ export function usePatientsManagement() {
   });
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeSegment, setActiveSegment] = useState<PatientSegment>('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -135,6 +148,10 @@ export function usePatientsManagement() {
   const filteredPatients = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return patients.filter((patient) => {
+      if (!matchesPatientSegment(patient, activeSegment)) {
+        return false;
+      }
+
       return (
         patient.name.toLowerCase().includes(search) ||
         patient.email?.toLowerCase().includes(search) ||
@@ -142,7 +159,7 @@ export function usePatientsManagement() {
         patient.cpf?.includes(search)
       );
     });
-  }, [patients, searchTerm]);
+  }, [activeSegment, patients, searchTerm]);
 
   const patientInsights = useMemo(
     () => getPatientInsights(patients, filteredPatients),
@@ -182,6 +199,7 @@ export function usePatientsManagement() {
   };
 
   return {
+    activeSegment,
     error,
     filteredPatients,
     formData,
@@ -192,6 +210,7 @@ export function usePatientsManagement() {
     patientInsights,
     searchTerm,
     selectedPatientId,
+    setActiveSegment,
     setFormData,
     setIsCreateDialogOpen,
     setSearchTerm,

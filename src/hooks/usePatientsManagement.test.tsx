@@ -7,6 +7,7 @@ import {
   getPatientInsights,
   getInitials,
   isValidDate,
+  matchesPatientSegment,
   usePatientsManagement,
 } from './usePatientsManagement';
 
@@ -131,6 +132,40 @@ describe('usePatientsManagement', () => {
     });
   });
 
+  it('filters patients by operational segment for fast triage', () => {
+    const { result } = renderHook(() => usePatientsManagement());
+
+    act(() => {
+      result.current.setActiveSegment('scheduled');
+    });
+
+    expect(result.current.filteredPatients).toHaveLength(1);
+    expect(result.current.filteredPatients[0]?.id).toBe('patient-3');
+
+    act(() => {
+      result.current.setActiveSegment('reachable');
+    });
+
+    expect(result.current.filteredPatients).toHaveLength(2);
+    expect(result.current.filteredPatients.map((patient) => patient.id)).toEqual([
+      'patient-1',
+      'patient-2',
+    ]);
+  });
+
+  it('combines search and segment filters without leaking unrelated patients', () => {
+    const { result } = renderHook(() => usePatientsManagement());
+
+    act(() => {
+      result.current.setActiveSegment('reachable');
+      result.current.setSearchTerm('bruno');
+    });
+
+    expect(result.current.filteredPatients).toHaveLength(1);
+    expect(result.current.filteredPatients[0]?.id).toBe('patient-2');
+    expect(result.current.patientInsights.filteredPatients).toBe(1);
+  });
+
   it('creates a patient and resets dialog/form state on success', async () => {
     const { result } = renderHook(() => usePatientsManagement());
 
@@ -235,5 +270,30 @@ describe('getPatientInsights', () => {
       upcomingAppointments: 1,
       recentPatients: 2,
     });
+  });
+
+  it('matches operational segments consistently', () => {
+    const reachablePatient = {
+      id: '1',
+      name: 'Ana',
+      email: 'ana@example.com',
+      created_at: new Date().toISOString(),
+    };
+    const scheduledPatient = {
+      id: '2',
+      name: 'Bruno',
+      created_at: new Date().toISOString(),
+      next_appointment_date: '2026-05-01T10:00:00.000Z',
+    };
+    const stalePatient = {
+      id: '3',
+      name: 'Clara',
+      created_at: '2025-01-01T10:00:00.000Z',
+    };
+
+    expect(matchesPatientSegment(reachablePatient, 'all')).toBe(true);
+    expect(matchesPatientSegment(reachablePatient, 'reachable')).toBe(true);
+    expect(matchesPatientSegment(scheduledPatient, 'scheduled')).toBe(true);
+    expect(matchesPatientSegment(stalePatient, 'recent')).toBe(false);
   });
 });
