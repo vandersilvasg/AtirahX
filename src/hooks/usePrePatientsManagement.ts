@@ -64,6 +64,35 @@ export type QuickStageAction = {
   targetStage: PrePatient['stage'];
 };
 
+const SUGGESTED_NEXT_ACTIONS: Record<string, string[]> = {
+  lead_novo: [
+    'Realizar primeiro contato em ate 5 minutos',
+    'Enviar mensagem inicial com proposta de valor',
+  ],
+  contato_iniciado: [
+    'Confirmar interesse e objeções principais',
+    'Qualificar necessidade e urgencia do procedimento',
+  ],
+  qualificado: [
+    'Oferecer agenda e confirmar melhor horario',
+    'Enviar condicoes e preparar agendamento',
+  ],
+  agendado: [
+    'Confirmar comparecimento no dia anterior',
+    'Enviar orientacoes pre-consulta e localizacao',
+  ],
+  compareceu: [
+    'Apresentar proposta e conduzir fechamento',
+    'Registrar retorno comercial em ate 24 horas',
+  ],
+  fechou: [
+    'Registrar detalhes do fechamento e onboarding',
+  ],
+  perdido: [
+    'Registrar motivo e agendar tentativa futura',
+  ],
+};
+
 const EMPTY_FORM: PrePatientFormData = {
   name: '',
   email: '',
@@ -173,9 +202,14 @@ export function getQuickStageAction(prePatient: PrePatient): QuickStageAction | 
   return { label: 'Marcar fechamento', targetStage: 'fechou' };
 }
 
+export function getSuggestedNextActions(stage: string | null | undefined) {
+  return SUGGESTED_NEXT_ACTIONS[normalizeStage(stage)] ?? [];
+}
+
 function getStageUpdatePayload(prePatient: PrePatient, targetStage: PrePatient['stage']) {
   const nowIso = new Date().toISOString();
   const nextStatus = targetStage === 'perdido' ? 'perdido' : prePatient.status;
+  const suggestedNextAction = getSuggestedNextActions(targetStage)[0] ?? null;
   const nextAction =
     targetStage === 'perdido'
       ? 'Avaliar recuperacao futura'
@@ -183,7 +217,7 @@ function getStageUpdatePayload(prePatient: PrePatient, targetStage: PrePatient['
         ? 'Confirmar comparecimento'
         : targetStage === 'compareceu'
           ? 'Avancar para proposta e fechamento'
-          : prePatient.next_action;
+          : suggestedNextAction ?? prePatient.next_action;
   const nextTemperature =
     targetStage === 'fechou'
       ? 'quente'

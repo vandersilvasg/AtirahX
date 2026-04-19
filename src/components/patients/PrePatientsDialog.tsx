@@ -9,7 +9,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { PrePatientFormData } from '@/hooks/usePrePatientsManagement';
+import {
+  getSuggestedNextActions,
+  type PrePatientFormData,
+} from '@/hooks/usePrePatientsManagement';
 import { Loader2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 
@@ -34,6 +37,8 @@ export function PrePatientsDialog({
   title,
   description,
 }: PrePatientsDialogProps) {
+  const suggestedNextActions = getSuggestedNextActions(formData.stage);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-auto">
@@ -73,9 +78,7 @@ export function PrePatientsDialog({
               <Input
                 id="health_insurance"
                 value={formData.health_insurance}
-                onChange={(e) =>
-                  setFormData({ ...formData, health_insurance: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, health_insurance: e.target.value })}
               />
             </div>
             <div className="space-y-2">
@@ -118,7 +121,18 @@ export function PrePatientsDialog({
                 id="stage"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={formData.stage}
-                onChange={(e) => setFormData({ ...formData, stage: e.target.value })}
+                onChange={(e) => {
+                  const nextStage = e.target.value;
+                  const nextSuggestedAction = getSuggestedNextActions(nextStage)[0] ?? '';
+                  setFormData({
+                    ...formData,
+                    stage: nextStage,
+                    next_action:
+                      !formData.next_action || suggestedNextActions.includes(formData.next_action)
+                        ? nextSuggestedAction
+                        : formData.next_action,
+                  });
+                }}
               >
                 <option value="lead_novo">Lead novo</option>
                 <option value="contato_iniciado">Contato iniciado</option>
@@ -159,12 +173,28 @@ export function PrePatientsDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="next_action">Próxima ação</Label>
+              <Label htmlFor="next_action">Proxima acao</Label>
               <Input
                 id="next_action"
                 value={formData.next_action}
                 onChange={(e) => setFormData({ ...formData, next_action: e.target.value })}
               />
+              {suggestedNextActions.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {suggestedNextActions.map((suggestion) => (
+                    <Button
+                      key={suggestion}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-auto whitespace-normal py-1.5 text-left"
+                      onClick={() => setFormData({ ...formData, next_action: suggestion })}
+                    >
+                      {suggestion}
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="response_time_seconds">Tempo de resposta (s)</Label>
@@ -180,7 +210,7 @@ export function PrePatientsDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="last_contact_at">Último contato</Label>
+              <Label htmlFor="last_contact_at">Ultimo contato</Label>
               <Input
                 id="last_contact_at"
                 type="datetime-local"
@@ -196,7 +226,7 @@ export function PrePatientsDialog({
                 onChange={(e) => setFormData({ ...formData, lost_reason: e.target.value })}
               />
             </div>
-            <div className="md:col-span-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:col-span-2 sm:grid-cols-3">
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

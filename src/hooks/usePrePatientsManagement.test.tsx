@@ -5,6 +5,7 @@ import {
   formatWhatsappToDDDNumber,
   getPrePatientInsights,
   getQuickStageAction,
+  getSuggestedNextActions,
   matchesPrePatientSegment,
   usePrePatientsManagement,
 } from './usePrePatientsManagement';
@@ -291,9 +292,11 @@ describe('usePrePatientsManagement', () => {
       payload: expect.objectContaining({
         stage: 'contato_iniciado',
         last_contact_at: expect.any(String),
+        next_action: 'Confirmar interesse e objeções principais',
       }),
     });
     expect(mockState.rows[0]?.stage).toBe('contato_iniciado');
+    expect(mockState.rows[0]?.next_action).toBe('Confirmar interesse e objeções principais');
     expect(mockState.toastSuccess).toHaveBeenCalledWith('Lead movido para Contato iniciado.');
   });
 });
@@ -410,5 +413,12 @@ describe('pre patient helpers', () => {
       label: 'Iniciar contato',
       targetStage: 'contato_iniciado',
     });
+  });
+
+  it('returns stage-based next action suggestions', () => {
+    expect(getSuggestedNextActions('qualificado')).toEqual([
+      'Oferecer agenda e confirmar melhor horario',
+      'Enviar condicoes e preparar agendamento',
+    ]);
   });
 });
