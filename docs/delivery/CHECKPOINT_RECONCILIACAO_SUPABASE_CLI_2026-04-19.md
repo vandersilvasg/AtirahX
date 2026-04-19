@@ -79,13 +79,23 @@ O SQL passou a usar `to_regclass(...)` antes de reaplicar a publication.
 - ausencia de trilha oficial em `supabase/migrations`
 - registro oficial do bloco `59/60/61` no historico remoto
 
-### Parcialmente validado
+### Realtime validado
 
 Realtime:
 
 - a migration de reaplicacao foi executada e registrada
-- um teste funcional controlado em `pre_patients` nao recebeu evento via subscriber sintético
-- isso nao prova sozinho falha de publication, porque o app real usa client autenticado por sessao de usuario e o teste foi um subscriber tecnico fora do browser
+- um primeiro teste tecnico com subscriber nao autenticado como usuario de app nao recebeu evento
+- a validacao definitiva foi refeita com um usuario temporario real do Supabase:
+  - `auth.users` temporario criado
+  - `profiles` temporario criado com role `owner`
+  - login executado via `anon key`
+  - subscriber realtime autenticado recebeu `INSERT` e `DELETE` em `pre_patients`
+  - usuario e dados sinteticos foram removidos ao final
+
+Conclusao:
+
+- o fluxo de `postgres_changes` para `pre_patients` esta funcional no contexto real de usuario autenticado
+- a publicacao reaplicada pela reconciliacao esta operacional para o caso validado
 
 ## Leitura pragmatica
 
@@ -95,10 +105,7 @@ O que restou em aberto nao e mais versionamento ou migration, e sim validacao fu
 
 ## Proxima validacao recomendada
 
-1. Abrir a aplicacao com sessao autenticada normal.
-2. Validar se os canais relevantes chegam a `SUBSCRIBED`.
-3. Testar mudancas em:
-   - `pre_patients`
+1. Validar no app real os canais de:
    - `patients`
    - `medx_history`
-4. Se ainda houver ausencia de evento, executar `VERIFICAR_REALTIME_TABELAS.sql` no SQL Editor para inspecao direta de `pg_publication`.
+2. Se algum modulo especifico ainda falhar, executar `VERIFICAR_REALTIME_TABELAS.sql` no SQL Editor para inspecao direta de `pg_publication`.
