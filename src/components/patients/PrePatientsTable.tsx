@@ -11,10 +11,11 @@ import {
 } from '@/components/ui/table';
 import {
   formatWhatsappToDDDNumber,
+  getLeadAttentionState,
   getQuickStageAction,
   type PrePatient,
 } from '@/hooks/usePrePatientsManagement';
-import { ArrowRight, Pencil, ShieldAlert, Target, Thermometer, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Pencil, ShieldAlert, Target, Thermometer, Trash2 } from 'lucide-react';
 
 function getTemperatureBadgeClassName(temperature?: string | null) {
   if (temperature === 'quente') {
@@ -109,10 +110,14 @@ export function PrePatientsTable({
       <TableBody>
         {prePatients.map((prePatient) => {
           const status = getCommercialStatus(prePatient);
+          const attention = getLeadAttentionState(prePatient);
           const quickAction = getQuickStageAction(prePatient);
 
           return (
-            <TableRow key={prePatient.id}>
+            <TableRow
+              key={prePatient.id}
+              className={attention.isAttentionNeeded ? 'bg-amber-500/5' : undefined}
+            >
               <TableCell>
                 <div className="space-y-1">
                   <p className="font-medium">{prePatient.name ?? '-'}</p>
@@ -120,6 +125,15 @@ export function PrePatientsTable({
                     <Badge variant="outline" className={status.className}>
                       {status.label}
                     </Badge>
+                    {attention.isAttentionNeeded && (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/20 bg-amber-500/10 text-amber-700"
+                      >
+                        <AlertTriangle className="mr-1 h-3 w-3" />
+                        {attention.label}
+                      </Badge>
+                    )}
                     {prePatient.health_insurance && (
                       <Badge variant="secondary">{prePatient.health_insurance}</Badge>
                     )}
@@ -179,11 +193,17 @@ export function PrePatientsTable({
                         ? `Ultimo contato: ${new Date(prePatient.last_contact_at).toLocaleDateString('pt-BR')}`
                         : 'Sem ultimo contato registrado'}
                     </p>
+                    {attention.isAttentionNeeded && (
+                      <p className="text-xs text-amber-700">{attention.reason}</p>
+                    )}
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <ShieldAlert className="h-4 w-4" />
-                    Sem proxima acao
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <ShieldAlert className="h-4 w-4" />
+                      Sem proxima acao
+                    </div>
+                    <p className="text-xs text-amber-700">{attention.reason}</p>
                   </div>
                 )}
               </TableCell>

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { usePrePatientsManagement } from '@/hooks/usePrePatientsManagement';
-import { Flame, Plus, Search, Target, TrendingUp, UserCheck } from 'lucide-react';
+import { AlertTriangle, Flame, Plus, Search, Target, TrendingUp, UserCheck } from 'lucide-react';
 
 export default function PrePatients() {
   const {
@@ -94,7 +94,7 @@ export default function PrePatients() {
           </div>
         </MagicBentoCard>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MagicBentoCard contentClassName="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -139,6 +139,21 @@ export default function PrePatients() {
                 </p>
               </div>
               <Target className="h-5 w-5 text-amber-500" />
+            </div>
+          </MagicBentoCard>
+
+          <MagicBentoCard contentClassName="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Pedem acao</p>
+                <p className="mt-2 text-3xl font-semibold text-foreground">
+                  {prePatientInsights.attentionLeads}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Leads sem proxima acao ou com contato atrasado.
+                </p>
+              </div>
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
             </div>
           </MagicBentoCard>
 

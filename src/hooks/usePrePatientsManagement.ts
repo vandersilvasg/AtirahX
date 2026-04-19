@@ -55,6 +55,7 @@ export type PrePatientInsights = {
   filteredLeads: number;
   hotLeads: number;
   followUpLeads: number;
+  attentionLeads: number;
   convertedLeads: number;
   pipelineValue: number;
 };
@@ -62,6 +63,12 @@ export type PrePatientInsights = {
 export type QuickStageAction = {
   label: string;
   targetStage: PrePatient['stage'];
+};
+
+export type LeadAttentionState = {
+  isAttentionNeeded: boolean;
+  label: string;
+  reason: string;
 };
 
 const SUGGESTED_NEXT_ACTIONS: Record<string, string[]> = {
@@ -167,6 +174,8 @@ export function getPrePatientInsights(
     hotLeads: prePatients.filter((prePatient) => matchesPrePatientSegment(prePatient, 'hot')).length,
     followUpLeads: prePatients.filter((prePatient) => matchesPrePatientSegment(prePatient, 'follow_up'))
       .length,
+    attentionLeads: prePatients.filter((prePatient) => getLeadAttentionState(prePatient).isAttentionNeeded)
+      .length,
     convertedLeads: prePatients.filter((prePatient) => matchesPrePatientSegment(prePatient, 'converted'))
       .length,
     pipelineValue: prePatients.reduce(
@@ -200,6 +209,57 @@ export function getQuickStageAction(prePatient: PrePatient): QuickStageAction | 
   }
 
   return { label: 'Marcar fechamento', targetStage: 'fechou' };
+}
+
+export function getLeadAttentionState(prePatient: PrePatient): LeadAttentionState {
+  const normalizedStage = normalizeStage(prePatient.stage);
+  if (prePatient.fechou || normalizedStage === 'fechou' || normalizedStage === 'perdido') {
+    return {
+      isAttentionNeeded: false,
+      label: 'Estavel',
+      reason: 'Lead fora da fila ativa.',
+    };
+  }
+
+  if (!prePatient.next_action) {
+    return {
+      isAttentionNeeded: true,
+      label: 'Sem proxima acao',
+      reason: 'Lead ativo sem encaminhamento registrado.',
+    };
+  }
+
+  if (!prePatient.last_contact_at) {
+    return {
+      isAttentionNeeded: true,
+      label: 'Sem contato recente',
+      reason: 'Nao existe ultimo contato registrado.',
+    };
+  }
+
+  const lastContact = new Date(prePatient.last_contact_at).getTime();
+  if (Number.isNaN(lastContact)) {
+    return {
+      isAttentionNeeded: true,
+      label: 'Contato invalido',
+      reason: 'Ultimo contato nao pode ser interpretado.',
+    };
+  }
+
+  const threeDaysMs = 1000 * 60 * 60 * 24 * 3;
+  if (Date.now() - lastContact > threeDaysMs) {
+    return {
+      isAttentionNeeded: true,
+      label: 'Contato atrasado',
+      reason: 'Lead sem interacao recente ha mais de 3 dias.',
+    };
+  }
+
+  return {
+    isAttentionNeeded: false,
+    label: 'Em ritmo',
+    reason: 'Follow-up registrado dentro da janela esperada.',
+  };
 }
 
 export function getSuggestedNextActions(stage: string | null | undefined) {

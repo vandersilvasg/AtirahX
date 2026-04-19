@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   formatWhatsappToDDDNumber,
+  getLeadAttentionState,
   getPrePatientInsights,
   getQuickStageAction,
   getSuggestedNextActions,
@@ -182,6 +183,7 @@ describe('usePrePatientsManagement', () => {
       filteredLeads: 2,
       hotLeads: 1,
       followUpLeads: 1,
+      attentionLeads: 1,
       convertedLeads: 1,
       pipelineValue: 3600,
     });
@@ -380,6 +382,7 @@ describe('pre patient helpers', () => {
       filteredLeads: 1,
       hotLeads: 1,
       followUpLeads: 1,
+      attentionLeads: 1,
       convertedLeads: 1,
       pipelineValue: 3000,
     });
@@ -420,5 +423,36 @@ describe('pre patient helpers', () => {
       'Oferecer agenda e confirmar melhor horario',
       'Enviar condicoes e preparar agendamento',
     ]);
+  });
+
+  it('flags active leads without next action or stale contact as attention needed', () => {
+    expect(
+      getLeadAttentionState({
+        id: '1',
+        name: 'Ana',
+        email: 'ana@example.com',
+        phone: null,
+        health_insurance: null,
+        status: null,
+        area_interest: null,
+        stage: 'lead_novo',
+        source_channel: 'instagram',
+        estimated_value: 1000,
+        temperature: 'quente',
+        compareceu: false,
+        fechou: false,
+        no_show: false,
+        next_action: null,
+        response_time_seconds: null,
+        last_contact_at: null,
+        procedure_interest: null,
+        lost_reason: null,
+        created_at: new Date().toISOString(),
+      })
+    ).toEqual({
+      isAttentionNeeded: true,
+      label: 'Sem proxima acao',
+      reason: 'Lead ativo sem encaminhamento registrado.',
+    });
   });
 });
