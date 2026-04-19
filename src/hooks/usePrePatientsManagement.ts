@@ -47,6 +47,17 @@ export type PrePatientFormData = {
   procedure_interest: string;
 };
 
+export type PrePatientSegment = 'all' | 'hot' | 'follow_up' | 'converted';
+
+export type PrePatientInsights = {
+  totalLeads: number;
+  filteredLeads: number;
+  hotLeads: number;
+  followUpLeads: number;
+  convertedLeads: number;
+  pipelineValue: number;
+};
+
 const EMPTY_FORM: PrePatientFormData = {
   name: '',
   email: '',
@@ -97,6 +108,39 @@ export function formatWhatsappToDDDNumber(raw?: string | null) {
   return `(${ddd}) ${number}`;
 }
 
+export function matchesPrePatientSegment(
+  prePatient: PrePatient,
+  segment: PrePatientSegment
+) {
+  if (segment === 'all') return true;
+  if (segment === 'hot') {
+    return prePatient.temperature === 'quente' && !prePatient.fechou;
+  }
+  if (segment === 'follow_up') {
+    return Boolean(prePatient.next_action) && !prePatient.fechou && !prePatient.no_show;
+  }
+  return Boolean(prePatient.fechou || prePatient.stage === 'fechou');
+}
+
+export function getPrePatientInsights(
+  prePatients: PrePatient[],
+  filteredPrePatients: PrePatient[]
+): PrePatientInsights {
+  return {
+    totalLeads: prePatients.length,
+    filteredLeads: filteredPrePatients.length,
+    hotLeads: prePatients.filter((prePatient) => matchesPrePatientSegment(prePatient, 'hot')).length,
+    followUpLeads: prePatients.filter((prePatient) => matchesPrePatientSegment(prePatient, 'follow_up'))
+      .length,
+    convertedLeads: prePatients.filter((prePatient) => matchesPrePatientSegment(prePatient, 'converted'))
+      .length,
+    pipelineValue: prePatients.reduce(
+      (sum, prePatient) => sum + Number(prePatient.estimated_value || 0),
+      0
+    ),
+  };
+}
+
 export function usePrePatientsManagement() {
   const { data, loading, error } = useRealtimeList<PrePatient>({
     table: 'pre_patients',
@@ -104,6 +148,7 @@ export function usePrePatientsManagement() {
   });
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeSegment, setActiveSegment] = useState<PrePatientSegment>('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -113,6 +158,10 @@ export function usePrePatientsManagement() {
   const filtered = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return data.filter((prePatient) => {
+      if (!matchesPrePatientSegment(prePatient, activeSegment)) {
+        return false;
+      }
+
       return (
         (prePatient.name ?? '').toLowerCase().includes(search) ||
         (prePatient.email ?? '').toLowerCase().includes(search) ||
@@ -126,7 +175,12 @@ export function usePrePatientsManagement() {
         (prePatient.next_action ?? '').toLowerCase().includes(search)
       );
     });
-  }, [data, searchTerm]);
+  }, [activeSegment, data, searchTerm]);
+
+  const prePatientInsights = useMemo(
+    () => getPrePatientInsights(data, filtered),
+    [data, filtered]
+  );
 
   const resetForm = () => {
     setFormData(EMPTY_FORM);
@@ -273,6 +327,7 @@ export function usePrePatientsManagement() {
   };
 
   return {
+    activeSegment,
     error,
     filtered,
     formData,
@@ -285,7 +340,9 @@ export function usePrePatientsManagement() {
     loading,
     openCreate,
     openEdit,
+    prePatientInsights,
     searchTerm,
+    setActiveSegment,
     setFormData,
     setIsCreateDialogOpen,
     setIsEditDialogOpen,
