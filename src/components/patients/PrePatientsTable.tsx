@@ -15,7 +15,7 @@ import {
   getQuickStageAction,
   type PrePatient,
 } from '@/hooks/usePrePatientsManagement';
-import { AlertTriangle, ArrowRight, Pencil, ShieldAlert, Target, Thermometer, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Pencil, ShieldAlert, Target, Thermometer, Trash2 } from 'lucide-react';
 
 function getTemperatureBadgeClassName(temperature?: string | null) {
   if (temperature === 'quente') {
@@ -73,8 +73,10 @@ type PrePatientsTableProps = {
   loading: boolean;
   onDelete: (id: string) => Promise<void>;
   onEdit: (prePatient: PrePatient) => void;
+  onQuickContact: (prePatient: PrePatient) => Promise<void>;
   onQuickStageAdvance: (prePatient: PrePatient) => Promise<void>;
   prePatients: PrePatient[];
+  quickContactId: string | null;
   quickActionId: string | null;
 };
 
@@ -83,8 +85,10 @@ export function PrePatientsTable({
   loading,
   onDelete,
   onEdit,
+  onQuickContact,
   onQuickStageAdvance,
   prePatients,
+  quickContactId,
   quickActionId,
 }: PrePatientsTableProps) {
   return (
@@ -208,6 +212,15 @@ export function PrePatientsTable({
                 )}
               </TableCell>
               <TableCell className="space-x-2 text-right">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void onQuickContact(prePatient)}
+                  disabled={quickContactId === prePatient.id}
+                >
+                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                  {quickContactId === prePatient.id ? 'Salvando...' : 'Registrar contato'}
+                </Button>
                 {quickAction && (
                   <Button
                     variant="secondary"

@@ -300,6 +300,13 @@ function getStageUpdatePayload(prePatient: PrePatient, targetStage: PrePatient['
   };
 }
 
+function getQuickContactPayload(prePatient: PrePatient) {
+  return {
+    last_contact_at: new Date().toISOString(),
+    next_action: prePatient.next_action || getSuggestedNextActions(prePatient.stage)[0] || null,
+  };
+}
+
 export function usePrePatientsManagement() {
   const { data, setData, loading, error } = useRealtimeList<PrePatient>({
     table: 'pre_patients',
@@ -311,6 +318,7 @@ export function usePrePatientsManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [quickContactId, setQuickContactId] = useState<string | null>(null);
   const [quickActionId, setQuickActionId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formData, setFormData] = useState<PrePatientFormData>(EMPTY_FORM);
@@ -538,6 +546,49 @@ export function usePrePatientsManagement() {
     }
   };
 
+  const handleQuickContact = async (prePatient: PrePatient) => {
+    const optimisticPayload = getQuickContactPayload(prePatient);
+    setQuickContactId(prePatient.id);
+    setData((previous) =>
+      previous.map((item) =>
+        item.id === prePatient.id
+          ? {
+              ...item,
+              ...optimisticPayload,
+            }
+          : item
+      )
+    );
+
+    try {
+      const supabase = await getSupabaseClient();
+      const { error: updateError } = await supabase
+        .from('pre_patients')
+        .update(optimisticPayload)
+        .eq('id', prePatient.id);
+
+      if (updateError) throw updateError;
+
+      toast.success('Contato registrado no lead.');
+    } catch (error: unknown) {
+      setData((previous) =>
+        previous.map((item) =>
+          item.id === prePatient.id
+            ? {
+                ...item,
+                last_contact_at: prePatient.last_contact_at,
+                next_action: prePatient.next_action,
+              }
+            : item
+        )
+      );
+      console.error(error);
+      toast.error(getErrorMessage(error, 'Erro ao registrar contato rapido'));
+    } finally {
+      setQuickContactId(null);
+    }
+  };
+
   return {
     activeSegment,
     error,
@@ -550,7 +601,9 @@ export function usePrePatientsManagement() {
     isEditDialogOpen,
     isSaving,
     loading,
+    quickContactId,
     quickActionId,
+    handleQuickContact,
     handleQuickStageAdvance,
     openCreate,
     openEdit,

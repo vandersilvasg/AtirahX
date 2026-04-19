@@ -312,6 +312,30 @@ describe('usePrePatientsManagement', () => {
     expect(mockState.rows[0]?.next_action).toBe('Confirmar interesse e objeções principais');
     expect(mockState.toastSuccess).toHaveBeenCalledWith('Lead movido para Contato iniciado.');
   });
+
+  it('registers contact quickly and injects suggested next action when missing', async () => {
+    mockState.rows[0] = {
+      ...mockState.rows[0],
+      next_action: null,
+    };
+
+    const { result } = renderHook(() => usePrePatientsManagement());
+
+    await act(async () => {
+      await result.current.handleQuickContact(mockState.rows[0] as never);
+    });
+
+    expect(mockState.updateCalls).toContainEqual({
+      id: 'pre-1',
+      payload: expect.objectContaining({
+        last_contact_at: expect.any(String),
+        next_action: 'Realizar primeiro contato em ate 5 minutos',
+      }),
+    });
+    expect(mockState.rows[0]?.next_action).toBe('Realizar primeiro contato em ate 5 minutos');
+    expect(mockState.rows[0]?.last_contact_at).toEqual(expect.any(String));
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Contato registrado no lead.');
+  });
 });
 
 describe('pre patient helpers', () => {
