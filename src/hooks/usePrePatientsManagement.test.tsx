@@ -216,6 +216,17 @@ describe('usePrePatientsManagement', () => {
     expect(result.current.prePatientInsights.filteredLeads).toBe(1);
   });
 
+  it('filters leads that explicitly need action', () => {
+    const { result } = renderHook(() => usePrePatientsManagement());
+
+    act(() => {
+      result.current.setActiveSegment('attention');
+    });
+
+    expect(result.current.filtered).toHaveLength(1);
+    expect(result.current.filtered[0]?.id).toBe('pre-1');
+  });
+
   it('creates, updates and deletes pre-patients successfully', async () => {
     const { result } = renderHook(() => usePrePatientsManagement());
 

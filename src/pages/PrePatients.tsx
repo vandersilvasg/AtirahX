@@ -86,6 +86,9 @@ export default function PrePatients() {
                 <ToggleGroupItem value="follow_up" aria-label="Mostrar leads com follow-up">
                   Follow-up
                 </ToggleGroupItem>
+                <ToggleGroupItem value="attention" aria-label="Mostrar leads que pedem acao">
+                  Pedem acao
+                </ToggleGroupItem>
                 <ToggleGroupItem value="converted" aria-label="Mostrar leads convertidos">
                   Convertidos
                 </ToggleGroupItem>

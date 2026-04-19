@@ -48,7 +48,7 @@ export type PrePatientFormData = {
   procedure_interest: string;
 };
 
-export type PrePatientSegment = 'all' | 'hot' | 'follow_up' | 'converted';
+export type PrePatientSegment = 'all' | 'hot' | 'follow_up' | 'attention' | 'converted';
 
 export type PrePatientInsights = {
   totalLeads: number;
@@ -160,6 +160,9 @@ export function matchesPrePatientSegment(
   }
   if (segment === 'follow_up') {
     return Boolean(prePatient.next_action) && !prePatient.fechou && !prePatient.no_show;
+  }
+  if (segment === 'attention') {
+    return getLeadAttentionState(prePatient).isAttentionNeeded;
   }
   return Boolean(prePatient.fechou || prePatient.stage === 'fechou');
 }
