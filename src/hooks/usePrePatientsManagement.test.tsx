@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   formatWhatsappToDDDNumber,
   getPrePatientInsights,
+  getQuickStageAction,
   matchesPrePatientSegment,
   usePrePatientsManagement,
 } from './usePrePatientsManagement';
@@ -43,6 +44,12 @@ const mockState = vi.hoisted(() => ({
 vi.mock('@/hooks/useRealtimeList', () => ({
   useRealtimeList: vi.fn(() => ({
     data: mockState.rows,
+    setData: (updater: ((previous: PrePatient[]) => PrePatient[]) | PrePatient[]) => {
+      mockState.rows =
+        typeof updater === 'function'
+          ? updater(mockState.rows as PrePatient[])
+          : (updater as PrePatient[]);
+    },
     loading: false,
     error: mockState.error,
   })),
@@ -271,6 +278,24 @@ describe('usePrePatientsManagement', () => {
     expect(mockState.deleteCalls).toContain('pre-1');
     expect(mockState.toastSuccess).toHaveBeenCalledWith('Pre paciente removido.');
   });
+
+  it('advances lead stage quickly with optimistic feedback', async () => {
+    const { result } = renderHook(() => usePrePatientsManagement());
+
+    await act(async () => {
+      await result.current.handleQuickStageAdvance(mockState.rows[0] as never);
+    });
+
+    expect(mockState.updateCalls).toContainEqual({
+      id: 'pre-1',
+      payload: expect.objectContaining({
+        stage: 'contato_iniciado',
+        last_contact_at: expect.any(String),
+      }),
+    });
+    expect(mockState.rows[0]?.stage).toBe('contato_iniciado');
+    expect(mockState.toastSuccess).toHaveBeenCalledWith('Lead movido para Contato iniciado.');
+  });
 });
 
 describe('pre patient helpers', () => {
@@ -354,6 +379,36 @@ describe('pre patient helpers', () => {
       followUpLeads: 1,
       convertedLeads: 1,
       pipelineValue: 3000,
+    });
+  });
+
+  it('suggests the next quick commercial action from the current stage', () => {
+    expect(
+      getQuickStageAction({
+        id: '1',
+        name: 'Ana',
+        email: 'ana@example.com',
+        phone: null,
+        health_insurance: null,
+        status: null,
+        area_interest: null,
+        stage: 'lead_novo',
+        source_channel: 'instagram',
+        estimated_value: 1000,
+        temperature: 'quente',
+        compareceu: false,
+        fechou: false,
+        no_show: false,
+        next_action: 'Chamar',
+        response_time_seconds: null,
+        last_contact_at: null,
+        procedure_interest: null,
+        lost_reason: null,
+        created_at: new Date().toISOString(),
+      })
+    ).toEqual({
+      label: 'Iniciar contato',
+      targetStage: 'contato_iniciado',
     });
   });
 });

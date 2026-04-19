@@ -16,6 +16,7 @@ export default function PrePatients() {
     formData,
     handleCreate,
     handleDelete,
+    handleQuickStageAdvance,
     handleUpdate,
     isCreateDialogOpen,
     isEditDialogOpen,
@@ -24,6 +25,7 @@ export default function PrePatients() {
     openCreate,
     openEdit,
     prePatientInsights,
+    quickActionId,
     searchTerm,
     setActiveSegment,
     setFormData,
@@ -168,7 +170,9 @@ export default function PrePatients() {
             loading={loading}
             onDelete={handleDelete}
             onEdit={openEdit}
+            onQuickStageAdvance={handleQuickStageAdvance}
             prePatients={filtered}
+            quickActionId={quickActionId}
           />
 
           {!loading && filtered.length === 0 && (

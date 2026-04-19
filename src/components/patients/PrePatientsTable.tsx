@@ -11,9 +11,10 @@ import {
 } from '@/components/ui/table';
 import {
   formatWhatsappToDDDNumber,
+  getQuickStageAction,
   type PrePatient,
 } from '@/hooks/usePrePatientsManagement';
-import { Pencil, ShieldAlert, Target, Thermometer, Trash2 } from 'lucide-react';
+import { ArrowRight, Pencil, ShieldAlert, Target, Thermometer, Trash2 } from 'lucide-react';
 
 function getTemperatureBadgeClassName(temperature?: string | null) {
   if (temperature === 'quente') {
@@ -71,7 +72,9 @@ type PrePatientsTableProps = {
   loading: boolean;
   onDelete: (id: string) => Promise<void>;
   onEdit: (prePatient: PrePatient) => void;
+  onQuickStageAdvance: (prePatient: PrePatient) => Promise<void>;
   prePatients: PrePatient[];
+  quickActionId: string | null;
 };
 
 export function PrePatientsTable({
@@ -79,7 +82,9 @@ export function PrePatientsTable({
   loading,
   onDelete,
   onEdit,
+  onQuickStageAdvance,
   prePatients,
+  quickActionId,
 }: PrePatientsTableProps) {
   return (
     <Table>
@@ -104,6 +109,7 @@ export function PrePatientsTable({
       <TableBody>
         {prePatients.map((prePatient) => {
           const status = getCommercialStatus(prePatient);
+          const quickAction = getQuickStageAction(prePatient);
 
           return (
             <TableRow key={prePatient.id}>
@@ -182,6 +188,17 @@ export function PrePatientsTable({
                 )}
               </TableCell>
               <TableCell className="space-x-2 text-right">
+                {quickAction && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void onQuickStageAdvance(prePatient)}
+                    disabled={quickActionId === prePatient.id}
+                  >
+                    <ArrowRight className="mr-1 h-4 w-4" />
+                    {quickActionId === prePatient.id ? 'Atualizando...' : quickAction.label}
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={() => onEdit(prePatient)}>
                   <Pencil className="mr-1 h-4 w-4" /> Editar
                 </Button>

@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useRealtimeList } from '@/hooks/useRealtimeList';
+import { getStageLabel, normalizeStage } from '@/lib/crmJourney';
 import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { toast } from 'sonner';
 
@@ -56,6 +57,11 @@ export type PrePatientInsights = {
   followUpLeads: number;
   convertedLeads: number;
   pipelineValue: number;
+};
+
+export type QuickStageAction = {
+  label: string;
+  targetStage: PrePatient['stage'];
 };
 
 const EMPTY_FORM: PrePatientFormData = {
@@ -141,8 +147,64 @@ export function getPrePatientInsights(
   };
 }
 
+export function getQuickStageAction(prePatient: PrePatient): QuickStageAction | null {
+  const currentStage = normalizeStage(prePatient.stage);
+
+  if (prePatient.fechou || currentStage === 'fechou' || currentStage === 'perdido') {
+    return null;
+  }
+
+  if (currentStage === 'lead_novo') {
+    return { label: 'Iniciar contato', targetStage: 'contato_iniciado' };
+  }
+
+  if (currentStage === 'contato_iniciado') {
+    return { label: 'Qualificar', targetStage: 'qualificado' };
+  }
+
+  if (currentStage === 'qualificado') {
+    return { label: 'Agendar', targetStage: 'agendado' };
+  }
+
+  if (currentStage === 'agendado') {
+    return { label: 'Confirmar comparecimento', targetStage: 'compareceu' };
+  }
+
+  return { label: 'Marcar fechamento', targetStage: 'fechou' };
+}
+
+function getStageUpdatePayload(prePatient: PrePatient, targetStage: PrePatient['stage']) {
+  const nowIso = new Date().toISOString();
+  const nextStatus = targetStage === 'perdido' ? 'perdido' : prePatient.status;
+  const nextAction =
+    targetStage === 'perdido'
+      ? 'Avaliar recuperacao futura'
+      : targetStage === 'agendado'
+        ? 'Confirmar comparecimento'
+        : targetStage === 'compareceu'
+          ? 'Avancar para proposta e fechamento'
+          : prePatient.next_action;
+  const nextTemperature =
+    targetStage === 'fechou'
+      ? 'quente'
+      : targetStage === 'perdido'
+        ? 'frio'
+        : prePatient.temperature;
+
+  return {
+    stage: targetStage,
+    status: nextStatus,
+    compareceu: targetStage === 'compareceu' || targetStage === 'fechou',
+    fechou: targetStage === 'fechou',
+    no_show: false,
+    last_contact_at: nowIso,
+    next_action: nextAction,
+    temperature: nextTemperature,
+  };
+}
+
 export function usePrePatientsManagement() {
-  const { data, loading, error } = useRealtimeList<PrePatient>({
+  const { data, setData, loading, error } = useRealtimeList<PrePatient>({
     table: 'pre_patients',
     order: { column: 'created_at', ascending: false },
   });
@@ -152,6 +214,7 @@ export function usePrePatientsManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [quickActionId, setQuickActionId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formData, setFormData] = useState<PrePatientFormData>(EMPTY_FORM);
 
@@ -326,6 +389,58 @@ export function usePrePatientsManagement() {
     }
   };
 
+  const handleQuickStageAdvance = async (prePatient: PrePatient) => {
+    const quickAction = getQuickStageAction(prePatient);
+    if (!quickAction) return;
+
+    const optimisticPayload = getStageUpdatePayload(prePatient, quickAction.targetStage);
+    setQuickActionId(prePatient.id);
+    setData((previous) =>
+      previous.map((item) =>
+        item.id === prePatient.id
+          ? {
+              ...item,
+              ...optimisticPayload,
+            }
+          : item
+      )
+    );
+
+    try {
+      const supabase = await getSupabaseClient();
+      const { error: updateError } = await supabase
+        .from('pre_patients')
+        .update(optimisticPayload)
+        .eq('id', prePatient.id);
+
+      if (updateError) throw updateError;
+
+      toast.success(`Lead movido para ${getStageLabel(normalizeStage(quickAction.targetStage))}.`);
+    } catch (error: unknown) {
+      setData((previous) =>
+        previous.map((item) =>
+          item.id === prePatient.id
+            ? {
+                ...item,
+                stage: prePatient.stage,
+                status: prePatient.status,
+                compareceu: prePatient.compareceu,
+                fechou: prePatient.fechou,
+                no_show: prePatient.no_show,
+                last_contact_at: prePatient.last_contact_at,
+                next_action: prePatient.next_action,
+                temperature: prePatient.temperature,
+              }
+            : item
+        )
+      );
+      console.error(error);
+      toast.error(getErrorMessage(error, 'Erro ao atualizar etapa rapidamente'));
+    } finally {
+      setQuickActionId(null);
+    }
+  };
+
   return {
     activeSegment,
     error,
@@ -338,6 +453,8 @@ export function usePrePatientsManagement() {
     isEditDialogOpen,
     isSaving,
     loading,
+    quickActionId,
+    handleQuickStageAdvance,
     openCreate,
     openEdit,
     prePatientInsights,
