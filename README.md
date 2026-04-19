@@ -25,6 +25,11 @@ Sistema web para operacao clinica com modulos de autenticacao, agenda, CRM, foll
 - `docs/`: documentacao organizada por tema
 - `scripts/`: scripts auxiliares
 
+## Canonico vs legado
+
+- a aplicacao na raiz deste repositorio e a base canonica do produto
+- o pacote historico anterior do repositorio foi preservado em `docs/archive/AtirahX-legacy-pack/`
+
 ## Modulos principais
 
 - Dashboard e metricas
