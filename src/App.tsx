@@ -3,10 +3,14 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Financeiro = lazy(() => import("./pages/Financeiro"));
 const CRM = lazy(() => import("./pages/CRM"));
+const CampanhasOrigem = lazy(() => import("./pages/CampanhasOrigem"));
 const Agenda = lazy(() => import("./pages/Agenda"));
 const FollowUp = lazy(() => import("./pages/FollowUp"));
+const RecuperacaoPacientes = lazy(() => import("./pages/RecuperacaoPacientes"));
 const Assistant = lazy(() => import("./pages/Assistant"));
+const AutomacaoInteligente = lazy(() => import("./pages/AutomacaoInteligente"));
 const Patients = lazy(() => import("./pages/Patients"));
 const PrePatients = lazy(() => import("./pages/PrePatients"));
 const Convenios = lazy(() => import("./pages/Convenios"));
@@ -40,10 +44,14 @@ const App = () => (
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/financeiro" element={<Financeiro />} />
         <Route path="/crm" element={<CRM />} />
+        <Route path="/campanhas-origem" element={<CampanhasOrigem />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/follow-up" element={<FollowUp />} />
+        <Route path="/recuperacao-pacientes" element={<RecuperacaoPacientes />} />
         <Route path="/assistant" element={<Assistant />} />
+        <Route path="/automacao-inteligente" element={<AutomacaoInteligente />} />
         <Route path="/patients" element={<Patients />} />
         <Route path="/pre-patients" element={<PrePatients />} />
         <Route path="/convenios" element={<Convenios />} />

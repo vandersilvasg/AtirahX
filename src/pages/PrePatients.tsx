@@ -33,12 +33,12 @@ export default function PrePatients() {
       <div className="space-y-8 p-8">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Pre Pacientes</h1>
+            <h1 className="text-3xl font-bold text-foreground">Pre-pacientes</h1>
             <p className="mt-1 text-muted-foreground">
-              Leads antes de se tornarem pacientes do CRM.
+              Fila qualificada de leads antes da promocao para o CRM principal.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Ao preencher o campo Nome e salvar, o lead e promovido para o CRM automaticamente.
+              Ao preencher o campo nome e salvar, o lead pode seguir automaticamente para o CRM.
             </p>
           </div>
           <Button onClick={openCreate}>

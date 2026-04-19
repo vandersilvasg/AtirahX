@@ -3,37 +3,27 @@ import type { DragEvent } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCrmJourney } from './useCrmJourney';
 
-type RealtimeTable = 'appointments' | 'patients' | 'profiles';
+type RealtimeTable = 'pre_patients';
 
-type Appointment = {
-  id: string;
-  patient_id: string | null;
-  doctor_id: string | null;
-  status: string | null;
-  journey_stage: string | null;
-  scheduled_at: string | null;
-  appointment_date: string | null;
-  reason: string | null;
-  notes: string | null;
-};
-
-type Patient = {
-  id: string;
-  name: string;
-  phone: string | null;
-};
-
-type Doctor = {
+type PrePatient = {
   id: string;
   name: string | null;
-  role: string | null;
+  phone: string | null;
+  status: string | null;
+  stage: string | null;
+  source_channel: string | null;
+  estimated_value: number | null;
+  temperature: 'frio' | 'morno' | 'quente' | null;
+  next_action: string | null;
+  procedure_interest: string | null;
+  last_contact_at: string | null;
+  lost_reason: string | null;
+  created_at: string | null;
 };
 
 const mockState = vi.hoisted(() => ({
   initialData: {
-    appointments: [] as Appointment[],
-    patients: [] as Patient[],
-    profiles: [] as Doctor[],
+    pre_patients: [] as PrePatient[],
   },
   updatePayloads: [] as Array<Record<string, unknown>>,
   eqValues: [] as Array<{ column: string; value: string }>,
@@ -81,11 +71,11 @@ vi.mock('sonner', () => ({
   },
 }));
 
-function createDragEvent(appointmentId: string): DragEvent<HTMLDivElement> {
+function createDragEvent(prePatientId: string): DragEvent<HTMLDivElement> {
   return {
     preventDefault: vi.fn(),
     dataTransfer: {
-      getData: vi.fn(() => appointmentId),
+      getData: vi.fn(() => prePatientId),
       setData: vi.fn(),
       effectAllowed: 'move',
       dropEffect: 'move',
@@ -100,50 +90,56 @@ describe('useCrmJourney', () => {
     mockState.eqValues = [];
     mockState.updateError = null;
     mockState.initialData = {
-      appointments: [
+      pre_patients: [
         {
-          id: 'appt-1',
-          patient_id: 'patient-1',
-          doctor_id: 'doctor-1',
-          status: 'scheduled',
-          journey_stage: 'agendado',
-          scheduled_at: '2026-04-18T10:00:00.000Z',
-          appointment_date: null,
-          reason: 'Consulta',
-          notes: null,
+          id: 'lead-1',
+          name: 'Ana',
+          phone: '5511999999999',
+          status: null,
+          stage: 'lead_novo',
+          source_channel: 'instagram',
+          estimated_value: 1200,
+          temperature: 'quente',
+          next_action: 'Ligar hoje',
+          procedure_interest: 'Consulta premium',
+          last_contact_at: null,
+          lost_reason: null,
+          created_at: '2026-04-18T10:00:00.000Z',
         },
       ],
-      patients: [{ id: 'patient-1', name: 'Ana', phone: '5511999999999' }],
-      profiles: [{ id: 'doctor-1', name: 'Dr. Bruno', role: 'doctor' }],
     };
   });
 
-  it('maps entities and groups appointments by normalized stage', () => {
+  it('groups pre patients by normalized stage', () => {
     const { result } = renderHook(() => useCrmJourney());
 
     expect(result.current.loading).toBe(false);
-    expect(result.current.appointmentsByStage.agendado).toHaveLength(1);
-    expect(result.current.patientById.get('patient-1')?.name).toBe('Ana');
-    expect(result.current.doctorById.get('doctor-1')?.name).toBe('Dr. Bruno');
+    expect(result.current.prePatientsByStage.lead_novo).toHaveLength(1);
+    expect(result.current.prePatients[0]?.name).toBe('Ana');
   });
 
-  it('moves an appointment optimistically and persists the new stage on success', async () => {
+  it('moves a lead optimistically and persists the new stage on success', async () => {
     const { result } = renderHook(() => useCrmJourney());
 
     await act(async () => {
-      await result.current.handleDropOnStage(createDragEvent('appt-1'), 'finalizado');
+      await result.current.handleDropOnStage(createDragEvent('lead-1'), 'fechou');
     });
 
     await waitFor(() => {
-      expect(result.current.appointmentsByStage.finalizado).toHaveLength(1);
+      expect(result.current.prePatientsByStage.fechou).toHaveLength(1);
     });
 
-    expect(mockState.updatePayloads).toEqual([
-      { journey_stage: 'finalizado', status: 'completed' },
-    ]);
-    expect(mockState.eqValues).toEqual([{ column: 'id', value: 'appt-1' }]);
-    expect(mockState.success).toHaveBeenCalledWith('Paciente movido para Finalizado.');
-    expect(result.current.updatingAppointmentId).toBeNull();
+    expect(mockState.updatePayloads).toHaveLength(1);
+    expect(mockState.updatePayloads[0]).toMatchObject({
+      stage: 'fechou',
+      fechou: true,
+      compareceu: true,
+      no_show: false,
+      temperature: 'quente',
+    });
+    expect(mockState.eqValues).toEqual([{ column: 'id', value: 'lead-1' }]);
+    expect(mockState.success).toHaveBeenCalledWith('Lead movido para Fechou.');
+    expect(result.current.updatingPrePatientId).toBeNull();
   });
 
   it('rolls back the optimistic move when the database update fails', async () => {
@@ -152,15 +148,15 @@ describe('useCrmJourney', () => {
     const { result } = renderHook(() => useCrmJourney());
 
     await act(async () => {
-      await result.current.handleDropOnStage(createDragEvent('appt-1'), 'cancelado');
+      await result.current.handleDropOnStage(createDragEvent('lead-1'), 'perdido');
     });
 
     await waitFor(() => {
-      expect(result.current.appointmentsByStage.agendado).toHaveLength(1);
+      expect(result.current.prePatientsByStage.lead_novo).toHaveLength(1);
     });
 
-    expect(result.current.appointmentsByStage.cancelado).toHaveLength(0);
+    expect(result.current.prePatientsByStage.perdido).toHaveLength(0);
     expect(mockState.error).toHaveBeenCalledWith('update failed');
-    expect(result.current.updatingAppointmentId).toBeNull();
+    expect(result.current.updatingPrePatientId).toBeNull();
   });
 });

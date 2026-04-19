@@ -94,6 +94,134 @@ export function PrePatientsDialog({
                 onChange={(e) => setFormData({ ...formData, area_interest: e.target.value })}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="procedure_interest">Procedimento de interesse</Label>
+              <Input
+                id="procedure_interest"
+                value={formData.procedure_interest}
+                onChange={(e) =>
+                  setFormData({ ...formData, procedure_interest: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="source_channel">Origem</Label>
+              <Input
+                id="source_channel"
+                value={formData.source_channel}
+                onChange={(e) => setFormData({ ...formData, source_channel: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stage">Etapa do funil</Label>
+              <select
+                id="stage"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.stage}
+                onChange={(e) => setFormData({ ...formData, stage: e.target.value })}
+              >
+                <option value="lead_novo">Lead novo</option>
+                <option value="contato_iniciado">Contato iniciado</option>
+                <option value="qualificado">Qualificado</option>
+                <option value="agendado">Agendado</option>
+                <option value="compareceu">Compareceu</option>
+                <option value="fechou">Fechou</option>
+                <option value="perdido">Perdido</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="temperature">Temperatura</Label>
+              <select
+                id="temperature"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={formData.temperature}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    temperature: e.target.value as 'frio' | 'morno' | 'quente',
+                  })
+                }
+              >
+                <option value="frio">Frio</option>
+                <option value="morno">Morno</option>
+                <option value="quente">Quente</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="estimated_value">Ticket estimado (R$)</Label>
+              <Input
+                id="estimated_value"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.estimated_value}
+                onChange={(e) => setFormData({ ...formData, estimated_value: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="next_action">Próxima ação</Label>
+              <Input
+                id="next_action"
+                value={formData.next_action}
+                onChange={(e) => setFormData({ ...formData, next_action: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="response_time_seconds">Tempo de resposta (s)</Label>
+              <Input
+                id="response_time_seconds"
+                type="number"
+                min="0"
+                step="1"
+                value={formData.response_time_seconds}
+                onChange={(e) =>
+                  setFormData({ ...formData, response_time_seconds: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="last_contact_at">Último contato</Label>
+              <Input
+                id="last_contact_at"
+                type="datetime-local"
+                value={formData.last_contact_at}
+                onChange={(e) => setFormData({ ...formData, last_contact_at: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="lost_reason">Motivo de perda</Label>
+              <Input
+                id="lost_reason"
+                value={formData.lost_reason}
+                onChange={(e) => setFormData({ ...formData, lost_reason: e.target.value })}
+              />
+            </div>
+            <div className="md:col-span-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={formData.compareceu}
+                  onChange={(e) => setFormData({ ...formData, compareceu: e.target.checked })}
+                />
+                Compareceu
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={formData.fechou}
+                  onChange={(e) => setFormData({ ...formData, fechou: e.target.checked })}
+                />
+                Fechou
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={formData.no_show}
+                  onChange={(e) => setFormData({ ...formData, no_show: e.target.checked })}
+                />
+                No-show
+              </label>
+            </div>
           </div>
           <DialogFooter>
             <Button

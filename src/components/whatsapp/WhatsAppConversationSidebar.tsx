@@ -9,6 +9,9 @@ type ConversationItem = {
   lastMessagePreview: string;
   sessionId: string;
   totalMessages: number;
+  sourceChannel?: string;
+  temperature?: 'frio' | 'morno' | 'quente';
+  stage?: string;
 };
 
 type WhatsAppConversationSidebarProps = {
@@ -78,7 +81,7 @@ export function WhatsAppConversationSidebar({
             <div className="px-2 py-1 text-sm text-muted-foreground">Nenhuma conversa</div>
           )}
 
-          {filteredSessions.map((session) => {
+        {filteredSessions.map((session) => {
             const active = session.sessionId === selectedSessionId;
             const borderClass =
               session.kind === 'pre_patient'
@@ -122,7 +125,7 @@ export function WhatsAppConversationSidebar({
                   <div className="min-w-0 flex-1 overflow-hidden">
                     <div className="truncate text-sm font-medium">
                       {session.kind === 'pre_patient'
-                        ? 'Pre Paciente'
+                        ? session.displayName ?? session.sessionId
                         : session.displayName ?? session.sessionId}
                     </div>
                     <div className={`text-[10px] font-medium ${badgeClass}`}>
@@ -132,6 +135,29 @@ export function WhatsAppConversationSidebar({
                           ? 'Paciente'
                           : 'Desconhecido'}
                     </div>
+                    {session.kind === 'pre_patient' && (
+                      <div className="mt-0.5 flex items-center gap-1 text-[10px]">
+                        <span className="rounded bg-muted px-1.5 py-0.5">
+                          {session.sourceChannel ?? 'nao_informado'}
+                        </span>
+                        <span
+                          className={`rounded px-1.5 py-0.5 ${
+                            session.temperature === 'quente'
+                              ? 'bg-red-100 text-red-700'
+                              : session.temperature === 'frio'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }`}
+                        >
+                          {session.temperature ?? 'morno'}
+                        </span>
+                        {session.stage ? (
+                          <span className="rounded bg-background/60 px-1.5 py-0.5">
+                            {session.stage}
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
                     <div className="truncate text-xs text-white">{session.lastMessagePreview}</div>
                   </div>
 

@@ -42,7 +42,9 @@ export default function Patients() {
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Pacientes CRM</h1>
-            <p className="mt-1 text-muted-foreground">Sistema de gestao de pacientes</p>
+            <p className="mt-1 text-muted-foreground">
+              Base ativa da clinica com historico, busca e acesso rapido ao detalhe do paciente.
+            </p>
           </div>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -76,7 +78,7 @@ export default function Patients() {
               <p>
                 {searchTerm
                   ? 'Nenhum paciente encontrado com esse criterio'
-                  : 'Nenhum paciente cadastrado ainda'}
+                  : 'Voce ainda nao possui pacientes no CRM. Assim que a operacao comecar, eles aparecerao aqui.'}
               </p>
             </div>
           )}

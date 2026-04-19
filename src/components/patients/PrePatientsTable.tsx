@@ -42,9 +42,11 @@ export function PrePatientsTable({
         <TableRow>
           <TableHead>Nome</TableHead>
           <TableHead>Contato</TableHead>
-          <TableHead>Convenio</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Area de Interesse</TableHead>
+          <TableHead>Origem</TableHead>
+          <TableHead>Funil</TableHead>
+          <TableHead>Temperatura</TableHead>
+          <TableHead>Ticket</TableHead>
+          <TableHead>Próxima ação</TableHead>
           <TableHead className="text-right">Acoes</TableHead>
         </TableRow>
       </TableHeader>
@@ -60,9 +62,16 @@ export function PrePatientsTable({
                 </div>
               </div>
             </TableCell>
-            <TableCell>{prePatient.health_insurance ?? '-'}</TableCell>
-            <TableCell>{prePatient.status ?? '-'}</TableCell>
-            <TableCell>{prePatient.area_interest ?? '-'}</TableCell>
+            <TableCell>{prePatient.source_channel ?? '-'}</TableCell>
+            <TableCell>{prePatient.stage ?? '-'}</TableCell>
+            <TableCell className="capitalize">{prePatient.temperature ?? '-'}</TableCell>
+            <TableCell>
+              {new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL',
+              }).format(Number(prePatient.estimated_value || 0))}
+            </TableCell>
+            <TableCell>{prePatient.next_action ?? '-'}</TableCell>
             <TableCell className="space-x-2 text-right">
               <Button variant="outline" size="sm" onClick={() => onEdit(prePatient)}>
                 <Pencil className="mr-1 h-4 w-4" /> Editar

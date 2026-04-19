@@ -129,5 +129,15 @@ export function isConnected(status: string | InstanceStatus | undefined): boolea
 }
 
 export function getWhatsAppIntegrationErrorMessage(error: unknown, fallback = 'Erro desconhecido') {
-  return error instanceof Error && error.message ? error.message : fallback;
+  if (error instanceof Error && error.message) {
+    const message = error.message.toLowerCase();
+    if (message.includes('401') || message.includes('unauthorized') || message.includes('sessao expirada')) {
+      return 'Sessao expirada ou sem permissao para acessar a integracao.';
+    }
+    if (message.includes('403') || message.includes('forbidden')) {
+      return 'Sua conta nao possui permissao para configurar esta integracao.';
+    }
+    return error.message;
+  }
+  return fallback;
 }

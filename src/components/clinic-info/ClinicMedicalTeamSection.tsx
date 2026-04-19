@@ -48,6 +48,10 @@ export function ClinicMedicalTeamSection({
         </div>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+          Selecione apenas quem deve operar a agenda da clinica e mantenha os valores atualizados para previsao comercial e financeira.
+        </div>
+
         {selectedDoctors.length > 0 && (
           <div className="mb-4">
             <div className="mb-2 text-sm text-muted-foreground">Equipe atual selecionada</div>

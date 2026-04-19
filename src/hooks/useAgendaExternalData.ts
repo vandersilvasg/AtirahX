@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { webhookRequest } from '@/lib/webhookClient';
+import { isUnauthorizedError } from '@/lib/dashboardMetrics';
 import type { AgendaItem, Appointment } from '@/components/agenda/types';
 import {
   type AgendaData,
@@ -59,14 +60,12 @@ export function useAgendaExternalData({
       const agendasList = mapAgendaList(data);
 
       setAgendas(agendasList);
-
-      if (agendasList.length > 0) {
-        toast.success(`${agendasList.length} agenda(s) carregada(s) com sucesso`);
-      } else {
-        toast.info('Nenhuma agenda disponivel no momento');
-      }
     } catch (error: unknown) {
-      toast.error(`Erro ao buscar agendas: ${getErrorMessage(error, 'falha inesperada')}`);
+      if (isUnauthorizedError(error)) {
+        toast.warning('A agenda externa precisa ser reconectada antes da sincronizacao.');
+      } else {
+        toast.error(`Erro ao buscar agendas: ${getErrorMessage(error, 'falha inesperada')}`);
+      }
       setAgendas([]);
     } finally {
       setLoadingAgendas(false);
@@ -108,7 +107,11 @@ export function useAgendaExternalData({
         setAgendaData(data);
         setExternalAppointments(processExternalEvents(data));
       } catch (error: unknown) {
-        toast.error(`Erro ao buscar dados da agenda: ${getErrorMessage(error, 'falha inesperada')}`);
+        if (isUnauthorizedError(error)) {
+          toast.warning('Agenda externa sem autorizacao. Exibindo a agenda sem sincronizacao.');
+        } else {
+          toast.error(`Erro ao buscar dados da agenda: ${getErrorMessage(error, 'falha inesperada')}`);
+        }
         setAgendaData(null);
         setExternalAppointments([]);
       } finally {

@@ -11,6 +11,18 @@ export interface PrePatient {
   health_insurance: string | null;
   status: string | null;
   area_interest: string | null;
+  stage: string;
+  source_channel: string;
+  estimated_value: number;
+  temperature: 'frio' | 'morno' | 'quente';
+  compareceu: boolean;
+  fechou: boolean;
+  no_show: boolean;
+  lost_reason: string | null;
+  next_action: string | null;
+  response_time_seconds: number | null;
+  last_contact_at: string | null;
+  procedure_interest: string | null;
   created_at: string;
 }
 
@@ -21,6 +33,18 @@ export type PrePatientFormData = {
   health_insurance: string;
   status: string;
   area_interest: string;
+  stage: string;
+  source_channel: string;
+  estimated_value: string;
+  temperature: 'frio' | 'morno' | 'quente';
+  compareceu: boolean;
+  fechou: boolean;
+  no_show: boolean;
+  lost_reason: string;
+  next_action: string;
+  response_time_seconds: string;
+  last_contact_at: string;
+  procedure_interest: string;
 };
 
 const EMPTY_FORM: PrePatientFormData = {
@@ -30,7 +54,26 @@ const EMPTY_FORM: PrePatientFormData = {
   health_insurance: '',
   status: '',
   area_interest: '',
+  stage: 'lead_novo',
+  source_channel: 'nao_informado',
+  estimated_value: '0',
+  temperature: 'morno',
+  compareceu: false,
+  fechou: false,
+  no_show: false,
+  lost_reason: '',
+  next_action: '',
+  response_time_seconds: '',
+  last_contact_at: '',
+  procedure_interest: '',
 };
+
+function normalizeFormData(formData: Partial<PrePatientFormData>): PrePatientFormData {
+  return {
+    ...EMPTY_FORM,
+    ...formData,
+  };
+}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
@@ -76,7 +119,11 @@ export function usePrePatientsManagement() {
         (prePatient.phone ?? '').includes(search) ||
         (prePatient.health_insurance ?? '').toLowerCase().includes(search) ||
         (prePatient.status ?? '').toLowerCase().includes(search) ||
-        (prePatient.area_interest ?? '').toLowerCase().includes(search)
+        (prePatient.area_interest ?? '').toLowerCase().includes(search) ||
+        (prePatient.stage ?? '').toLowerCase().includes(search) ||
+        (prePatient.source_channel ?? '').toLowerCase().includes(search) ||
+        (prePatient.temperature ?? '').toLowerCase().includes(search) ||
+        (prePatient.next_action ?? '').toLowerCase().includes(search)
       );
     });
   }, [data, searchTerm]);
@@ -99,6 +146,21 @@ export function usePrePatientsManagement() {
       health_insurance: prePatient.health_insurance ?? '',
       status: prePatient.status ?? '',
       area_interest: prePatient.area_interest ?? '',
+      stage: prePatient.stage ?? 'lead_novo',
+      source_channel: prePatient.source_channel ?? 'nao_informado',
+      estimated_value: String(prePatient.estimated_value ?? 0),
+      temperature: prePatient.temperature ?? 'morno',
+      compareceu: Boolean(prePatient.compareceu),
+      fechou: Boolean(prePatient.fechou),
+      no_show: Boolean(prePatient.no_show),
+      lost_reason: prePatient.lost_reason ?? '',
+      next_action: prePatient.next_action ?? '',
+      response_time_seconds:
+        prePatient.response_time_seconds !== null && prePatient.response_time_seconds !== undefined
+          ? String(prePatient.response_time_seconds)
+          : '',
+      last_contact_at: prePatient.last_contact_at ? prePatient.last_contact_at.slice(0, 16) : '',
+      procedure_interest: prePatient.procedure_interest ?? '',
     });
     setIsEditDialogOpen(true);
   };
@@ -109,13 +171,30 @@ export function usePrePatientsManagement() {
 
     try {
       const supabase = await getSupabaseClient();
+      const normalizedForm = normalizeFormData(formData);
       const { error: insertError } = await supabase.from('pre_patients').insert({
-        name: formData.name || null,
-        email: formData.email || null,
-        phone: formData.phone || null,
-        health_insurance: formData.health_insurance || null,
-        status: formData.status || null,
-        area_interest: formData.area_interest || null,
+        name: normalizedForm.name || null,
+        email: normalizedForm.email || null,
+        phone: normalizedForm.phone || null,
+        health_insurance: normalizedForm.health_insurance || null,
+        status: normalizedForm.status || null,
+        area_interest: normalizedForm.area_interest || null,
+        stage: normalizedForm.stage,
+        source_channel: normalizedForm.source_channel,
+        estimated_value: Number(normalizedForm.estimated_value || 0),
+        temperature: normalizedForm.temperature,
+        compareceu: normalizedForm.compareceu,
+        fechou: normalizedForm.fechou,
+        no_show: normalizedForm.no_show,
+        lost_reason: normalizedForm.lost_reason || null,
+        next_action: normalizedForm.next_action || null,
+        response_time_seconds: normalizedForm.response_time_seconds
+          ? Number(normalizedForm.response_time_seconds)
+          : null,
+        last_contact_at: normalizedForm.last_contact_at
+          ? new Date(normalizedForm.last_contact_at).toISOString()
+          : null,
+        procedure_interest: normalizedForm.procedure_interest || null,
       });
 
       if (insertError) throw insertError;
@@ -138,15 +217,32 @@ export function usePrePatientsManagement() {
     setIsSaving(true);
     try {
       const supabase = await getSupabaseClient();
+      const normalizedForm = normalizeFormData(formData);
       const { error: updateError } = await supabase
         .from('pre_patients')
         .update({
-          name: formData.name || null,
-          email: formData.email || null,
-          phone: formData.phone || null,
-          health_insurance: formData.health_insurance || null,
-          status: formData.status || null,
-          area_interest: formData.area_interest || null,
+          name: normalizedForm.name || null,
+          email: normalizedForm.email || null,
+          phone: normalizedForm.phone || null,
+          health_insurance: normalizedForm.health_insurance || null,
+          status: normalizedForm.status || null,
+          area_interest: normalizedForm.area_interest || null,
+          stage: normalizedForm.stage,
+          source_channel: normalizedForm.source_channel,
+          estimated_value: Number(normalizedForm.estimated_value || 0),
+          temperature: normalizedForm.temperature,
+          compareceu: normalizedForm.compareceu,
+          fechou: normalizedForm.fechou,
+          no_show: normalizedForm.no_show,
+          lost_reason: normalizedForm.lost_reason || null,
+          next_action: normalizedForm.next_action || null,
+          response_time_seconds: normalizedForm.response_time_seconds
+            ? Number(normalizedForm.response_time_seconds)
+            : null,
+          last_contact_at: normalizedForm.last_contact_at
+            ? new Date(normalizedForm.last_contact_at).toISOString()
+            : null,
+          procedure_interest: normalizedForm.procedure_interest || null,
         })
         .eq('id', selectedId);
 
@@ -196,5 +292,4 @@ export function usePrePatientsManagement() {
     setSearchTerm,
   };
 }
-
 

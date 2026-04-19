@@ -120,6 +120,11 @@ export default function Agenda() {
   });
 
   const displayedAppointments = externalAppointments;
+  const consultasHoje = displayedAppointments.filter((appointment) => {
+    const appointmentDate = new Date(appointment.start);
+    const today = new Date();
+    return appointmentDate.toDateString() === today.toDateString();
+  }).length;
 
   const renderAgendaView = () => (
     <div className="space-y-6">
@@ -192,7 +197,31 @@ export default function Agenda() {
     <DashboardLayout>
       <div className="space-y-6 p-8">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Agenda</h1>
+          <h1 className="text-3xl font-bold text-foreground">Agenda Inteligente</h1>
+          <p className="mt-1 text-muted-foreground">
+            Visualize ocupacao, acompanhe consultas do dia e sincronize agendas externas quando disponiveis.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <MagicBentoCard contentClassName="p-4">
+            <p className="text-xs uppercase text-muted-foreground">Consultas hoje</p>
+            <p className="mt-2 text-2xl font-semibold">{consultasHoje}</p>
+          </MagicBentoCard>
+          <MagicBentoCard contentClassName="p-4">
+            <p className="text-xs uppercase text-muted-foreground">Eventos carregados</p>
+            <p className="mt-2 text-2xl font-semibold">{displayedAppointments.length}</p>
+          </MagicBentoCard>
+          <MagicBentoCard contentClassName="p-4">
+            <p className="text-xs uppercase text-muted-foreground">Agenda selecionada</p>
+            <p className="mt-2 text-sm font-semibold">{selectedAgenda === 'todos' ? 'Todas' : selectedAgenda}</p>
+          </MagicBentoCard>
+          <MagicBentoCard contentClassName="p-4">
+            <p className="text-xs uppercase text-muted-foreground">Sincronizacao</p>
+            <p className="mt-2 text-sm font-semibold">
+              {displayedAppointments.length > 0 ? 'Ativa' : 'Aguardando conexao externa'}
+            </p>
+          </MagicBentoCard>
         </div>
 
         {user?.role === 'doctor' ? (

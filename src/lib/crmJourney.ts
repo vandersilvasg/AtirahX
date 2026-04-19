@@ -1,29 +1,39 @@
-import type { AppointmentRow, DoctorRow, PatientRow, StageConfig, StageKey } from '@/hooks/useCrmJourney';
+import type { PrePatientRow, StageConfig, StageKey } from '@/hooks/useCrmJourney';
 
 export const CRM_STAGES: StageConfig[] = [
   {
-    key: 'agendado',
-    label: 'Agendado',
+    key: 'lead_novo',
+    label: 'Lead novo',
+    badgeClass: 'border-slate-200 bg-slate-500/10 text-slate-700',
+  },
+  {
+    key: 'contato_iniciado',
+    label: 'Contato iniciado',
     badgeClass: 'border-blue-200 bg-blue-500/10 text-blue-700',
   },
   {
-    key: 'aguardando',
-    label: 'Aguardando',
-    badgeClass: 'border-amber-200 bg-amber-500/10 text-amber-700',
+    key: 'qualificado',
+    label: 'Qualificado',
+    badgeClass: 'border-violet-200 bg-violet-500/10 text-violet-700',
   },
   {
-    key: 'em_atendimento',
-    label: 'Em atendimento',
-    badgeClass: 'border-indigo-200 bg-indigo-500/10 text-indigo-700',
+    key: 'agendado',
+    label: 'Agendado',
+    badgeClass: 'border-cyan-200 bg-cyan-500/10 text-cyan-700',
   },
   {
-    key: 'finalizado',
-    label: 'Finalizado',
+    key: 'compareceu',
+    label: 'Compareceu',
     badgeClass: 'border-emerald-200 bg-emerald-500/10 text-emerald-700',
   },
   {
-    key: 'cancelado',
-    label: 'Cancelado',
+    key: 'fechou',
+    label: 'Fechou',
+    badgeClass: 'border-green-200 bg-green-500/10 text-green-700',
+  },
+  {
+    key: 'perdido',
+    label: 'Perdido',
     badgeClass: 'border-rose-200 bg-rose-500/10 text-rose-700',
   },
 ];
@@ -31,29 +41,27 @@ export const CRM_STAGES: StageConfig[] = [
 const STAGE_KEYS = new Set<StageKey>(CRM_STAGES.map((stage) => stage.key));
 
 const STAGE_ALIASES: Record<string, StageKey> = {
+  lead_novo: 'lead_novo',
+  novo: 'lead_novo',
+  new: 'lead_novo',
+  pre: 'lead_novo',
+  contato_iniciado: 'contato_iniciado',
+  contato: 'contato_iniciado',
+  responded: 'contato_iniciado',
+  qualificado: 'qualificado',
+  qualified: 'qualificado',
   agendado: 'agendado',
   scheduled: 'agendado',
-  novo: 'agendado',
-  new: 'agendado',
-  aguardando: 'aguardando',
-  waiting: 'aguardando',
-  em_atendimento: 'em_atendimento',
-  ematendimento: 'em_atendimento',
-  in_progress: 'em_atendimento',
-  inprogress: 'em_atendimento',
-  atendimento: 'em_atendimento',
-  finalizado: 'finalizado',
-  concluido: 'finalizado',
-  concluded: 'finalizado',
-  completed: 'finalizado',
-  done: 'finalizado',
-  cancelado: 'cancelado',
-  canceled: 'cancelado',
-  cancelled: 'cancelado',
+  compareceu: 'compareceu',
+  attended: 'compareceu',
+  fechou: 'fechou',
+  won: 'fechou',
+  perdido: 'perdido',
+  lost: 'perdido',
 };
 
 export function normalizeStage(stage: string | null | undefined): StageKey {
-  if (!stage) return 'agendado';
+  if (!stage) return 'lead_novo';
 
   const normalized = stage
     .normalize('NFD')
@@ -66,25 +74,14 @@ export function normalizeStage(stage: string | null | undefined): StageKey {
     return normalized as StageKey;
   }
 
-  return STAGE_ALIASES[normalized] || 'agendado';
-}
-
-export function getAppointmentDateRaw(appointment: AppointmentRow): string | null {
-  return appointment.scheduled_at ?? appointment.appointment_date ?? null;
-}
-
-function getSortTimestamp(appointment: AppointmentRow): number {
-  const rawDate = getAppointmentDateRaw(appointment);
-  if (!rawDate) return Number.MAX_SAFE_INTEGER;
-  const timestamp = new Date(rawDate).getTime();
-  return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
+  return STAGE_ALIASES[normalized] || 'lead_novo';
 }
 
 export function formatDateLabel(rawDate: string | null): string {
-  if (!rawDate) return 'Sem data definida';
+  if (!rawDate) return 'Sem data';
 
   const parsed = new Date(rawDate);
-  if (Number.isNaN(parsed.getTime())) return 'Sem data valida';
+  if (Number.isNaN(parsed.getTime())) return 'Sem data';
 
   const hasTime = rawDate.includes('T');
   return new Intl.DateTimeFormat('pt-BR', {
@@ -110,23 +107,26 @@ export function formatPhone(rawPhone?: string | null): string {
   return `(${ddd}) ${number}`;
 }
 
-export function createEntityMap<T extends PatientRow | DoctorRow>(items: T[]) {
-  const map = new Map<string, T>();
-  items.forEach((item) => map.set(item.id, item));
-  return map;
+function getSortTimestamp(prePatient: PrePatientRow): number {
+  const rawDate = prePatient.last_contact_at ?? prePatient.created_at ?? null;
+  if (!rawDate) return Number.MAX_SAFE_INTEGER;
+  const timestamp = new Date(rawDate).getTime();
+  return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
 }
 
-export function groupAppointmentsByStage(appointments: AppointmentRow[]) {
-  const grouped: Record<StageKey, AppointmentRow[]> = {
+export function groupPrePatientsByStage(prePatients: PrePatientRow[]) {
+  const grouped: Record<StageKey, PrePatientRow[]> = {
+    lead_novo: [],
+    contato_iniciado: [],
+    qualificado: [],
     agendado: [],
-    aguardando: [],
-    em_atendimento: [],
-    finalizado: [],
-    cancelado: [],
+    compareceu: [],
+    fechou: [],
+    perdido: [],
   };
 
-  appointments.forEach((appointment) => {
-    grouped[normalizeStage(appointment.journey_stage)].push(appointment);
+  prePatients.forEach((prePatient) => {
+    grouped[normalizeStage(prePatient.stage)].push(prePatient);
   });
 
   CRM_STAGES.forEach((stage) => {
@@ -134,12 +134,6 @@ export function groupAppointmentsByStage(appointments: AppointmentRow[]) {
   });
 
   return grouped;
-}
-
-export function getNextAppointmentStatus(targetStage: StageKey, previousStatus: string | null) {
-  if (targetStage === 'finalizado') return 'completed';
-  if (targetStage === 'cancelado') return 'cancelled';
-  return previousStatus;
 }
 
 export function getStageLabel(targetStage: StageKey) {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { toast } from 'sonner';
+import { isMissingColumnError } from '@/lib/dashboardMetrics';
 import {
   buildDoctorPrices,
   buildDoctorTeam,
@@ -60,15 +61,32 @@ export function useClinicInfoManagement() {
       setLoadingDoctors(true);
       try {
         const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const doctorsWithPrice = await supabase
           .from('profiles')
           .select('id, name, email, specialization, role, consultation_price')
           .eq('role', 'doctor')
           .order('name');
+        let doctorRows: DoctorProfile[] = [];
 
-        if (error) throw error;
+        if (doctorsWithPrice.error) {
+          if (isMissingColumnError(doctorsWithPrice.error, 'consultation_price')) {
+            const fallbackDoctors = await supabase
+              .from('profiles')
+              .select('id, name, email, specialization, role')
+              .eq('role', 'doctor')
+              .order('name');
+            if (fallbackDoctors.error) throw fallbackDoctors.error;
+            doctorRows = ((fallbackDoctors.data ?? []) as DoctorProfile[]).map((doctor) => ({
+              ...doctor,
+              consultation_price: 0,
+            }));
+          } else {
+            throw doctorsWithPrice.error;
+          }
+        } else {
+          doctorRows = (doctorsWithPrice.data ?? []) as DoctorProfile[];
+        }
 
-        const doctorRows = (data ?? []) as DoctorProfile[];
         setDoctors(mapDoctorProfiles(doctorRows));
       } catch (error: unknown) {
         console.error('Erro ao carregar medicos:', error);
@@ -213,6 +231,13 @@ export function useClinicInfoManagement() {
       const errors = results.filter((result) => result.error);
 
       if (errors.length > 0) {
+        const missingPriceColumn = errors.some((result) =>
+          isMissingColumnError(result.error, 'consultation_price')
+        );
+        if (missingPriceColumn) {
+          toast.warning('Preco de consulta indisponivel neste banco. O restante da equipe continua funcionando.');
+          return;
+        }
         console.error('Erros ao salvar precos:', errors);
         toast.error('Erro ao salvar alguns precos de consulta');
         return;

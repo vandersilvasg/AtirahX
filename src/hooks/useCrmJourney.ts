@@ -1,25 +1,24 @@
 import { type DragEvent, useMemo, useState } from 'react';
 import { useRealtimeList } from '@/hooks/useRealtimeList';
 import {
-  createEntityMap,
   CRM_STAGES,
   formatDateLabel,
   formatPhone,
-  getAppointmentDateRaw,
-  getNextAppointmentStatus,
   getStageLabel,
-  groupAppointmentsByStage,
+  groupPrePatientsByStage,
   normalizeStage,
 } from '@/lib/crmJourney';
 import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { toast } from 'sonner';
 
 export type StageKey =
+  | 'lead_novo'
+  | 'contato_iniciado'
+  | 'qualificado'
   | 'agendado'
-  | 'aguardando'
-  | 'em_atendimento'
-  | 'finalizado'
-  | 'cancelado';
+  | 'compareceu'
+  | 'fechou'
+  | 'perdido';
 
 export type StageConfig = {
   key: StageKey;
@@ -27,150 +26,159 @@ export type StageConfig = {
   badgeClass: string;
 };
 
-export { CRM_STAGES, formatDateLabel, formatPhone, getAppointmentDateRaw, normalizeStage } from '@/lib/crmJourney';
+export { CRM_STAGES, formatDateLabel, formatPhone, normalizeStage } from '@/lib/crmJourney';
 
-export interface AppointmentRow {
-  id: string;
-  patient_id: string | null;
-  doctor_id: string | null;
-  status: string | null;
-  journey_stage: string | null;
-  scheduled_at: string | null;
-  appointment_date: string | null;
-  reason: string | null;
-  notes: string | null;
-}
-
-export interface PatientRow {
-  id: string;
-  name: string;
-  phone: string | null;
-}
-
-export interface DoctorRow {
+export interface PrePatientRow {
   id: string;
   name: string | null;
-  role: string | null;
+  phone: string | null;
+  status: string | null;
+  stage: string | null;
+  source_channel: string | null;
+  estimated_value: number | null;
+  temperature: 'frio' | 'morno' | 'quente' | null;
+  next_action: string | null;
+  procedure_interest: string | null;
+  last_contact_at: string | null;
+  lost_reason: string | null;
+  created_at: string | null;
 }
 
 export function useCrmJourney() {
-  const doctorFilters = useMemo(
-    () => [{ column: 'role', operator: 'eq' as const, value: 'doctor' }],
-    []
-  );
-
   const {
-    data: appointments,
-    setData: setAppointments,
-    loading: loadingAppointments,
-    error: appointmentsError,
-  } = useRealtimeList<AppointmentRow>({
-    table: 'appointments',
+    data: prePatients,
+    setData: setPrePatients,
+    loading,
+    error,
+  } = useRealtimeList<PrePatientRow>({
+    table: 'pre_patients',
     select:
-      'id, patient_id, doctor_id, status, journey_stage, scheduled_at, appointment_date, reason, notes',
-    order: { column: 'scheduled_at', ascending: true },
-  });
-
-  const {
-    data: patients,
-    loading: loadingPatients,
-    error: patientsError,
-  } = useRealtimeList<PatientRow>({
-    table: 'patients',
-    select: 'id, name, phone',
+      'id, name, phone, status, stage, source_channel, estimated_value, temperature, next_action, procedure_interest, last_contact_at, lost_reason, created_at',
     order: { column: 'created_at', ascending: false },
   });
 
-  const {
-    data: doctors,
-    loading: loadingDoctors,
-    error: doctorsError,
-  } = useRealtimeList<DoctorRow>({
-    table: 'profiles',
-    select: 'id, name, role',
-    filters: doctorFilters,
-  });
+  const [draggingPrePatientId, setDraggingPrePatientId] = useState<string | null>(null);
+  const [updatingPrePatientId, setUpdatingPrePatientId] = useState<string | null>(null);
 
-  const [draggingAppointmentId, setDraggingAppointmentId] = useState<string | null>(null);
-  const [updatingAppointmentId, setUpdatingAppointmentId] = useState<string | null>(null);
+  const prePatientsByStage = useMemo(() => {
+    return groupPrePatientsByStage(prePatients);
+  }, [prePatients]);
 
-  const patientById = useMemo(() => {
-    return createEntityMap(patients);
-  }, [patients]);
+  const stageMetrics = useMemo(() => {
+    return CRM_STAGES.reduce<Record<StageKey, { total: number; valor: number }>>((acc, stage) => {
+      const items = prePatientsByStage[stage.key];
+      acc[stage.key] = {
+        total: items.length,
+        valor: items.reduce((sum, item) => sum + Number(item.estimated_value || 0), 0),
+      };
+      return acc;
+    }, {} as Record<StageKey, { total: number; valor: number }>);
+  }, [prePatientsByStage]);
 
-  const doctorById = useMemo(() => {
-    return createEntityMap(doctors);
-  }, [doctors]);
+  const hotLeadsCount = useMemo(
+    () => prePatients.filter((item) => item.temperature === 'quente').length,
+    [prePatients]
+  );
 
-  const appointmentsByStage = useMemo(() => {
-    return groupAppointmentsByStage(appointments);
-  }, [appointments]);
-
-  const handleDragStart = (event: DragEvent<HTMLDivElement>, appointmentId: string) => {
-    event.dataTransfer.setData('text/plain', appointmentId);
+  const handleDragStart = (event: DragEvent<HTMLDivElement>, prePatientId: string) => {
+    event.dataTransfer.setData('text/plain', prePatientId);
     event.dataTransfer.effectAllowed = 'move';
-    setDraggingAppointmentId(appointmentId);
+    setDraggingPrePatientId(prePatientId);
   };
 
   const handleDragEnd = () => {
-    setDraggingAppointmentId(null);
+    setDraggingPrePatientId(null);
   };
 
-  const handleDropOnStage = async (
-    event: DragEvent<HTMLDivElement>,
-    targetStage: StageKey
-  ) => {
+  const handleDropOnStage = async (event: DragEvent<HTMLDivElement>, targetStage: StageKey) => {
     event.preventDefault();
 
-    const draggedId = event.dataTransfer.getData('text/plain') || draggingAppointmentId;
-    setDraggingAppointmentId(null);
+    const draggedId = event.dataTransfer.getData('text/plain') || draggingPrePatientId;
+    setDraggingPrePatientId(null);
 
     if (!draggedId) return;
 
-    const currentAppointment = appointments.find((appointment) => appointment.id === draggedId);
-    if (!currentAppointment) return;
+    const currentPrePatient = prePatients.find((prePatient) => prePatient.id === draggedId);
+    if (!currentPrePatient) return;
 
-    const currentStage = normalizeStage(currentAppointment.journey_stage);
+    const currentStage = normalizeStage(currentPrePatient.stage);
     if (currentStage === targetStage) return;
 
-    const previousJourneyStage = currentAppointment.journey_stage ?? null;
-    const previousStatus = currentAppointment.status ?? null;
-    const nextStatus = getNextAppointmentStatus(targetStage, previousStatus);
+    const previousStage = currentPrePatient.stage ?? null;
+    const previousStatus = currentPrePatient.status ?? null;
+    const previousNextAction = currentPrePatient.next_action ?? null;
+    const previousTemperature = currentPrePatient.temperature ?? null;
+    const nowIso = new Date().toISOString();
+    const nextStatus = targetStage === 'perdido' ? 'perdido' : previousStatus;
+    const nextAction =
+      targetStage === 'perdido'
+        ? 'Avaliar recuperacao futura'
+        : targetStage === 'agendado'
+          ? 'Confirmar comparecimento'
+          : targetStage === 'compareceu'
+            ? 'Avancar para proposta e fechamento'
+            : previousNextAction;
+    const nextTemperature =
+      targetStage === 'fechou'
+        ? 'quente'
+        : targetStage === 'perdido'
+          ? 'frio'
+          : previousTemperature;
 
-    setAppointments((previous) =>
-      previous.map((appointment) =>
-        appointment.id === draggedId
-          ? { ...appointment, journey_stage: targetStage, status: nextStatus }
-          : appointment
+    const stageSpecificFields = {
+      compareceu: targetStage === 'compareceu' || targetStage === 'fechou',
+      fechou: targetStage === 'fechou',
+      no_show: false,
+      last_contact_at: nowIso,
+      next_action: nextAction,
+      temperature: nextTemperature,
+    };
+
+    setPrePatients((previous) =>
+      previous.map((prePatient) =>
+        prePatient.id === draggedId
+          ? {
+              ...prePatient,
+              stage: targetStage,
+              status: nextStatus,
+              ...stageSpecificFields,
+            }
+          : prePatient
       )
     );
 
-    setUpdatingAppointmentId(draggedId);
+    setUpdatingPrePatientId(draggedId);
 
     const supabase = await getSupabaseClient();
-    const { error } = await supabase
-      .from('appointments')
-      .update({ journey_stage: targetStage, status: nextStatus })
+    const { error: updateError } = await supabase
+      .from('pre_patients')
+      .update({
+        stage: targetStage,
+        status: nextStatus,
+        ...stageSpecificFields,
+      })
       .eq('id', draggedId);
 
-    if (error) {
-      setAppointments((previous) =>
-        previous.map((appointment) =>
-          appointment.id === draggedId
+    if (updateError) {
+      setPrePatients((previous) =>
+        previous.map((prePatient) =>
+          prePatient.id === draggedId
             ? {
-                ...appointment,
-                journey_stage: previousJourneyStage,
+                ...prePatient,
+                stage: previousStage,
                 status: previousStatus,
+                next_action: previousNextAction,
+                temperature: previousTemperature,
               }
-            : appointment
+            : prePatient
         )
       );
-      toast.error(error.message || 'Nao foi possivel mover o paciente.');
+      toast.error(updateError.message || 'Nao foi possivel mover o lead.');
     } else {
-      toast.success(`Paciente movido para ${getStageLabel(targetStage)}.`);
+      toast.success(`Lead movido para ${getStageLabel(targetStage)}.`);
     }
 
-    setUpdatingAppointmentId(null);
+    setUpdatingPrePatientId(null);
   };
 
   const handleDragOverStage = (event: DragEvent<HTMLDivElement>) => {
@@ -179,17 +187,17 @@ export function useCrmJourney() {
   };
 
   return {
-    appointments,
-    appointmentsByStage,
-    draggingAppointmentId,
+    prePatients,
+    prePatientsByStage,
+    stageMetrics,
+    hotLeadsCount,
+    draggingPrePatientId,
     handleDragEnd,
     handleDragOverStage,
     handleDragStart,
     handleDropOnStage,
-    loading: loadingAppointments || loadingPatients || loadingDoctors,
-    pageError: appointmentsError || patientsError || doctorsError,
-    patientById,
-    updatingAppointmentId,
-    doctorById,
+    loading,
+    pageError: error,
+    updatingPrePatientId,
   };
 }

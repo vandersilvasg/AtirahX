@@ -3,8 +3,9 @@ import { ProfileAvatarSection } from '@/components/profile/ProfileAvatarSection'
 import { ProfileInfoSection } from '@/components/profile/ProfileInfoSection';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useProfileManagement } from '@/hooks/useProfileManagement';
-import { Loader2, Save } from 'lucide-react';
+import { Bell, BriefcaseMedical, Loader2, Save, Shield, UserRoundCheck } from 'lucide-react';
 
 export default function Profile() {
   const {
@@ -30,6 +31,35 @@ export default function Profile() {
   }
 
   const roleLabel = getRoleBadgeLabel(profileData.role);
+  const profileSummaryCards = [
+    {
+      title: 'Perfil de acesso',
+      value: roleLabel ?? 'Nao definido',
+      description: 'Define como voce opera no sistema e quais modulos sao prioritarios.',
+      icon: Shield,
+    },
+    {
+      title: 'Contato principal',
+      value: profileData.email || 'Nao informado',
+      description: profileData.phone || 'Telefone ainda nao informado.',
+      icon: UserRoundCheck,
+    },
+    {
+      title: 'Especialidade',
+      value: profileData.specialization || 'Nao informada',
+      description:
+        profileData.role === 'doctor'
+          ? 'Usada para contexto profissional e leitura de atendimento.'
+          : 'Campo opcional para perfis nao medicos.',
+      icon: BriefcaseMedical,
+    },
+    {
+      title: 'Preferencias',
+      value: 'Padrao da conta',
+      description: 'Idioma, notificacoes e seguranca podem evoluir a partir deste perfil.',
+      icon: Bell,
+    },
+  ];
 
   return (
     <DashboardLayout>
@@ -38,11 +68,46 @@ export default function Profile() {
           <div>
             <h1 className="text-3xl font-bold text-foreground">Meu Perfil</h1>
             <p className="mt-1 text-muted-foreground">
-              Gerencie suas informacoes pessoais e profissionais
+              Gerencie seus dados pessoais, contexto profissional e o que o sistema usa para te identificar.
             </p>
           </div>
           {roleLabel && <Badge className={getRoleBadgeClassName(profileData.role)}>{roleLabel}</Badge>}
         </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {profileSummaryCards.map((card) => (
+            <Card key={card.title}>
+              <CardHeader className="pb-3">
+                <CardDescription className="flex items-center justify-between text-xs uppercase tracking-wide">
+                  <span>{card.title}</span>
+                  <card.icon className="h-4 w-4 text-primary" />
+                </CardDescription>
+                <CardTitle className="text-lg break-all">{card.value}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs text-muted-foreground">{card.description}</CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Leitura da Conta</CardTitle>
+            <CardDescription>
+              Seu perfil precisa estar confiavel para notificacoes, agenda e relacionamento com pacientes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Nome, foto e cargo tornam o atendimento mais humano e reduzem ruido operacional.
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Email e telefone completos ajudam em recuperacao de acesso e comunicacao interna.
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Para medicos, especialidade e preco de consulta refinam CRM, agenda e dashboards.
+            </div>
+          </CardContent>
+        </Card>
 
         <ProfileAvatarSection
           onProfileDataChange={setProfileData}
@@ -51,10 +116,7 @@ export default function Profile() {
           userId={user?.id}
         />
 
-        <ProfileInfoSection
-          onProfileDataChange={setProfileData}
-          profileData={profileData}
-        />
+        <ProfileInfoSection onProfileDataChange={setProfileData} profileData={profileData} />
 
         <div className="flex justify-end">
           <Button onClick={() => void handleSave()} disabled={isSaving} size="lg">

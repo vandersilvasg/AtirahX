@@ -16,8 +16,10 @@ export function ProfileInfoSection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Informacoes Pessoais</CardTitle>
-        <CardDescription>Atualize seus dados pessoais e de contato</CardDescription>
+        <CardTitle>Informacoes Pessoais e Profissionais</CardTitle>
+        <CardDescription>
+          Atualize os dados usados na operacao diaria, identificacao interna e experiencia do paciente.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -98,7 +100,7 @@ export function ProfileInfoSection({
                 placeholder="0.00"
               />
               <p className="text-xs text-muted-foreground">
-                Valor cobrado por consulta (opcional)
+                Valor usado quando o banco suporta previsao financeira por consulta.
               </p>
             </div>
           </>

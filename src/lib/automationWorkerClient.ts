@@ -37,6 +37,7 @@ export async function runAutomationWorker(
       'Content-Type': 'application/json',
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${accessToken}`,
+      'x-authorization': `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
   });

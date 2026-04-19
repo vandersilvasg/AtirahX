@@ -149,14 +149,16 @@ describe('usePrePatientsManagement', () => {
       await result.current.handleCreate(createSubmitEvent());
     });
 
-    expect(mockState.insertCalls).toContainEqual({
-      name: 'Novo Lead',
-      email: 'lead@example.com',
-      phone: '5511888888888',
-      health_insurance: 'Bradesco',
-      status: 'contato',
-      area_interest: 'Orto',
-    });
+    expect(mockState.insertCalls).toContainEqual(
+      expect.objectContaining({
+        name: 'Novo Lead',
+        email: 'lead@example.com',
+        phone: '5511888888888',
+        health_insurance: 'Bradesco',
+        status: 'contato',
+        area_interest: 'Orto',
+      })
+    );
 
     act(() => {
       result.current.openEdit(mockState.rows[0]!);
@@ -176,14 +178,14 @@ describe('usePrePatientsManagement', () => {
 
     expect(mockState.updateCalls).toContainEqual({
       id: 'pre-1',
-      payload: {
+      payload: expect.objectContaining({
         name: 'Ana Atualizada',
         email: 'ana@example.com',
         phone: '5511999999999',
         health_insurance: 'Unimed',
         status: 'qualificado',
         area_interest: 'Cardio',
-      },
+      }),
     });
 
     await act(async () => {

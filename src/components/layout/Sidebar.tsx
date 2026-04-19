@@ -1,4 +1,4 @@
-﻿import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   Calendar,
@@ -12,6 +12,7 @@ import {
   LogOut,
   Building2,
   FileSpreadsheet,
+  HandCoins,
   UserCircle,
   SquareKanban,
   type LucideIcon,
@@ -41,41 +42,54 @@ export const Sidebar = () => {
     {
       path: '/dashboard',
       icon: BarChart3,
-      label: 'Metricas',
+      label: 'Crescimento da Clinica',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/whatsapp',
+      icon: MessageCircle,
+      label: 'Conversas',
+      roles: ['owner', 'secretary'],
+    },
+    {
+      path: '/financeiro',
+      icon: HandCoins,
+      label: 'Financeiro',
       roles: ['owner'],
     },
     {
-      path: '/crm',
       icon: SquareKanban,
-      label: 'CRM',
+      label: 'Leads & Pacientes',
       roles: ['owner', 'secretary'],
+      children: [
+        { path: '/crm', label: 'Pipeline' },
+        { path: '/patients', label: 'Pacientes CRM' },
+        { path: '/pre-patients', label: 'Pre-pacientes' },
+      ],
     },
     {
       path: '/agenda',
       icon: Calendar,
-      label: 'Agenda',
+      label: 'Agenda Inteligente',
       roles: ['owner', 'doctor', 'secretary'],
     },
     {
-      path: '/follow-up',
+      path: '/recuperacao-pacientes',
       icon: ClipboardList,
-      label: 'Follow Up',
+      label: 'Recuperacao de Pacientes',
       roles: ['owner', 'secretary'],
     },
     {
-      path: '/assistant',
+      path: '/automacao-inteligente',
       icon: MessageSquare,
-      label: 'Assistente',
-      roles: ['owner', 'doctor', 'secretary'],
+      label: 'Automacao Inteligente',
+      roles: ['owner', 'secretary'],
     },
     {
-      icon: Users,
-      label: 'Pacientes',
-      roles: ['owner', 'doctor', 'secretary'],
-      children: [
-        { path: '/patients', label: 'Pacientes CRM' },
-        { path: '/pre-patients', label: 'Pre Pacientes' },
-      ],
+      path: '/campanhas-origem',
+      icon: HandCoins,
+      label: 'Campanhas & Origem',
+      roles: ['owner', 'secretary'],
     },
     {
       path: '/convenios',
@@ -86,13 +100,7 @@ export const Sidebar = () => {
     {
       path: '/doctors-insurance',
       icon: FileSpreadsheet,
-      label: 'Visao de Convenios',
-      roles: ['owner', 'secretary'],
-    },
-    {
-      path: '/whatsapp',
-      icon: MessageCircle,
-      label: 'WhatsApp',
+      label: 'Convenios & Cobertura',
       roles: ['owner', 'secretary'],
     },
     {
@@ -104,13 +112,13 @@ export const Sidebar = () => {
     {
       path: '/integration',
       icon: Plug,
-      label: 'Integracao',
+      label: 'Integracoes',
       roles: ['owner'],
     },
     {
       path: '/clinic-info',
       icon: Settings,
-      label: 'Informacoes da Clinica',
+      label: 'Configuracoes da Clinica',
       roles: ['owner'],
     },
     {

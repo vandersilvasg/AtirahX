@@ -9,6 +9,13 @@ type SessionContact = {
   id: string;
   name: string | null;
   phone: string | null;
+  source_channel?: string | null;
+  temperature?: 'frio' | 'morno' | 'quente' | null;
+  stage?: string | null;
+  estimated_value?: number | null;
+  next_action?: string | null;
+  last_contact_at?: string | null;
+  procedure_interest?: string | null;
 };
 
 type DoctorProfile = {
@@ -26,6 +33,13 @@ type DoctorJoinRow = {
 export type ClassifiedSession = MedxSession & {
   kind: 'patient' | 'pre_patient' | 'unknown';
   displayName?: string;
+  sourceChannel?: string;
+  temperature?: 'frio' | 'morno' | 'quente';
+  stage?: string;
+  estimatedValue?: number;
+  nextAction?: string;
+  lastContactAt?: string;
+  procedureInterest?: string;
 };
 
 type UseWhatsAppConversationDataParams = {
@@ -75,7 +89,9 @@ export function useWhatsAppConversationData({
     queryKey: ['pre_patients_min'],
     queryFn: async () => {
       const supabase = await getSupabaseClient();
-      const { data } = await supabase.from('pre_patients').select('id, name, phone');
+        const { data } = await supabase
+          .from('pre_patients')
+          .select('id, name, phone, source_channel, temperature, stage, estimated_value, next_action, last_contact_at, procedure_interest');
       return (data as SessionContact[]) ?? [];
     },
     staleTime: 5 * 60_000,
@@ -170,7 +186,18 @@ export function useWhatsAppConversationData({
 
       const prePatient = prePatientsMap.get(session.sessionId);
       if (prePatient) {
-        return { ...session, kind: 'pre_patient', displayName: prePatient.name ?? undefined };
+        return {
+          ...session,
+          kind: 'pre_patient',
+          displayName: prePatient.name ?? undefined,
+          sourceChannel: prePatient.source_channel ?? undefined,
+          temperature: prePatient.temperature ?? undefined,
+          stage: prePatient.stage ?? undefined,
+          estimatedValue: Number(prePatient.estimated_value ?? 0),
+          nextAction: prePatient.next_action ?? undefined,
+          lastContactAt: prePatient.last_contact_at ?? undefined,
+          procedureInterest: prePatient.procedure_interest ?? undefined,
+        };
       }
 
       return { ...session, kind: 'unknown' };

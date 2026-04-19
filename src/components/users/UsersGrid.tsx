@@ -31,7 +31,9 @@ export function UsersGrid({
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center justify-center py-12">
           <User className="mb-4 h-12 w-12 text-muted-foreground/50" />
-          <p className="text-center text-muted-foreground">Nenhum usuario encontrado</p>
+          <p className="text-center text-muted-foreground">
+            Nenhum usuario encontrado. Crie a equipe inicial para liberar agenda, atendimento e operacao comercial.
+          </p>
         </CardContent>
       </Card>
     );

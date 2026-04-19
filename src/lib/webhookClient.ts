@@ -39,6 +39,19 @@ const parseResponse = async (response: Response) => {
   }
 };
 
+const getHttpErrorMessage = (status: number, errorBody: unknown) => {
+  if (status === 401) {
+    return 'Sessao expirada ou sem permissao para acessar esta integracao.';
+  }
+  if (status === 403) {
+    return 'Sua conta nao possui permissao para esta integracao.';
+  }
+  if (typeof errorBody === 'string' && errorBody.trim()) {
+    return `HTTP ${status}: ${errorBody}`;
+  }
+  return `HTTP ${status}`;
+};
+
 // Chama o proxy via fetch direto (sem supabase.functions.invoke)
 async function callProxyDirect(
   targetUrl: string,
@@ -75,7 +88,7 @@ async function callProxyDirect(
   if (!response.ok) {
     const errorText = await response.text();
     console.error('[webhookClient] Erro no proxy:', response.status, errorText);
-    throw new Error(`Erro no proxy: HTTP ${response.status}`);
+    throw new Error(getHttpErrorMessage(response.status, errorText));
   }
 
   const data = await response.json();
@@ -126,11 +139,7 @@ export async function webhookRequest<T>(
 
     if (!response.ok) {
       const errorBody = await parseResponse(response);
-      throw new Error(
-        typeof errorBody === 'string'
-          ? `HTTP ${response.status}: ${errorBody}`
-          : `HTTP ${response.status}`
-      );
+      throw new Error(getHttpErrorMessage(response.status, errorBody));
     }
 
     return (await parseResponse(response)) as T;

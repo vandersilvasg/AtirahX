@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSupabaseClient } from '@/lib/supabaseClientLoader';
 import { toast } from 'sonner';
+import { isMissingColumnError } from '@/lib/dashboardMetrics';
 
 export type ProfileData = {
   id: string;
@@ -82,7 +83,7 @@ export function useProfileManagement() {
     setIsSaving(true);
     try {
       const supabase = await getSupabaseClient();
-      const { error } = await supabase
+      let { error } = await supabase
         .from('profiles')
         .update({
           name: profileData.name,
@@ -93,6 +94,19 @@ export function useProfileManagement() {
           consultation_price: profileData.consultation_price,
         })
         .eq('id', user.id);
+
+      if (error && isMissingColumnError(error, 'consultation_price')) {
+        ({ error } = await supabase
+          .from('profiles')
+          .update({
+            name: profileData.name,
+            email: profileData.email,
+            phone: profileData.phone,
+            specialization: profileData.specialization,
+            avatar_url: profileData.avatar_url,
+          })
+          .eq('id', user.id));
+      }
 
       if (error) throw error;
       toast.success('Perfil atualizado com sucesso!');

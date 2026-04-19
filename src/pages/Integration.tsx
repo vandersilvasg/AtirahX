@@ -7,7 +7,17 @@ import {
 import { IntegrationHeader } from '@/components/integration/IntegrationHeader';
 import { IntegrationInstanceCard } from '@/components/integration/IntegrationInstanceCard';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { Card, CardContent } from '@/components/ui/card';
 import { useWhatsAppIntegration } from '@/hooks/useWhatsAppIntegration';
+
+const EXTRA_INTEGRATIONS = [
+  'Google Agenda',
+  'OpenAI',
+  'N8N / Webhooks',
+  'CRM externo',
+  'E-mail / SMTP',
+  'Meta Ads / Google Ads',
+];
 
 function formatDate(dateString: string) {
   try {
@@ -52,6 +62,19 @@ export default function Integration() {
     <DashboardLayout>
       <div className="space-y-8 p-6">
         <IntegrationHeader loading={loading} onRefresh={refreshInstances} />
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {EXTRA_INTEGRATIONS.map((integration) => (
+            <Card key={integration} className="border-dashed">
+              <CardContent className="p-4">
+                <p className="text-sm font-medium">{integration}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Conector previsto para a esteira premium. Status operacional centralizado nesta tela.
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
         {error && <IntegrationErrorState error={error} onRetry={refreshInstances} />}
 

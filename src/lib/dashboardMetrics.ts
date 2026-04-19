@@ -153,6 +153,23 @@ export function getDashboardErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+export function isMissingColumnError(error: unknown, columnName: string) {
+  if (!error || typeof error !== 'object') return false;
+
+  const code =
+    'code' in error && typeof (error as { code?: unknown }).code === 'string'
+      ? (error as { code: string }).code
+      : '';
+  const message = getDashboardErrorMessage(error, '').toLowerCase();
+
+  return code === '42703' || message.includes(columnName.toLowerCase());
+}
+
+export function isUnauthorizedError(error: unknown) {
+  const message = getDashboardErrorMessage(error, '').toLowerCase();
+  return message.includes('401') || message.includes('unauthorized') || message.includes('sessao expirada');
+}
+
 export function calculateDashboardTrend(current: number, previous: number): string {
   if (previous === 0 && current === 0) return '0%';
   if (previous === 0) return '+100%';

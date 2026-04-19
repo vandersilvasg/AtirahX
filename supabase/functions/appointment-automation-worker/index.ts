@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -108,28 +108,14 @@ function parseBody(raw: unknown): Required<Pick<WorkerRequest, 'limit' | 'dryRun
   return { limit, dryRun, jobIds, onlyChannel };
 }
 
-function base64UrlDecode(value: string): string {
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-  const bytes = Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
+function extractBearerToken(requestHeaders: Headers): string | null {
+  const rawAuthorization =
+    requestHeaders.get('x-authorization') ?? requestHeaders.get('authorization');
 
-function extractAuthUserIdFromBearer(authorizationHeader: string | null): string | null {
-  if (!authorizationHeader) return null;
-  const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
+  if (!rawAuthorization) return null;
+  const match = rawAuthorization.match(/^Bearer\s+(.+)$/i);
   if (!match) return null;
-  const token = match[1];
-  const parts = token.split('.');
-  if (parts.length < 2) return null;
-
-  try {
-    const payloadText = base64UrlDecode(parts[1]);
-    const payload = JSON.parse(payloadText) as Record<string, unknown>;
-    return typeof payload.sub === 'string' ? payload.sub : null;
-  } catch {
-    return null;
-  }
+  return match[1];
 }
 
 function formatScheduledAt(appointment: AppointmentRow | null): string {
@@ -195,12 +181,25 @@ function buildMessageText(job: JobRow, appointment: AppointmentRow | null, patie
 
 async function assertAuthorizedStaff(
   admin: ReturnType<typeof createClient>,
-  authorizationHeader: string | null
+  requestHeaders: Headers
 ): Promise<{ authUserId: string; role: string }> {
-  const authUserId = extractAuthUserIdFromBearer(authorizationHeader);
-  if (!authUserId) {
+  const bearerToken = extractBearerToken(requestHeaders);
+  if (!bearerToken) {
     throw new Error('Unauthorized: missing or invalid bearer token');
   }
+
+  // The function gateway rejects ES256 tokens in this project, so the
+  // worker verifies the bearer token directly with Supabase Auth.
+  const {
+    data: { user },
+    error: authError,
+  } = await admin.auth.getUser(bearerToken);
+
+  if (authError || !user?.id) {
+    throw new Error('Unauthorized: token verification failed');
+  }
+
+  const authUserId = user.id;
 
   const { data, error } = await admin
     .from('profiles')
@@ -561,9 +560,8 @@ Deno.serve(async (req) => {
     const serviceRoleKey = getRequiredEnv('SUPABASE_SERVICE_ROLE_KEY');
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
-    await assertAuthorizedStaff(admin, req.headers.get('authorization'));
-
     const body = parseBody(await req.json().catch(() => ({})));
+    await assertAuthorizedStaff(admin, req.headers);
     const pendingJobs = await loadPendingJobs(admin, {
       limit: body.limit,
       jobIds: body.jobIds,

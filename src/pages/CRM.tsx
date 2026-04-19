@@ -7,24 +7,28 @@ import { Loader2 } from 'lucide-react';
 
 export default function CRM() {
   const {
-    appointments,
-    appointmentsByStage,
-    doctorById,
-    draggingAppointmentId,
+    prePatients,
+    prePatientsByStage,
+    stageMetrics,
+    hotLeadsCount,
+    draggingPrePatientId,
     handleDragEnd,
     handleDragOverStage,
     handleDragStart,
     handleDropOnStage,
     loading,
     pageError,
-    patientById,
-    updatingAppointmentId,
+    updatingPrePatientId,
   } = useCrmJourney();
 
   return (
     <DashboardLayout requiredRoles={['owner', 'secretary']}>
       <div className="space-y-6 p-8">
-        <CrmHeader appointmentsCount={appointments.length} />
+        <CrmHeader
+          appointmentsCount={prePatients.length}
+          hotLeadsCount={hotLeadsCount}
+          totalPipelineValue={prePatients.reduce((sum, item) => sum + Number(item.estimated_value || 0), 0)}
+        />
 
         {loading ? (
           <Card>
@@ -41,15 +45,14 @@ export default function CRM() {
           </Card>
         ) : (
           <CrmKanbanBoard
-            appointmentsByStage={appointmentsByStage}
-            doctorById={doctorById}
-            draggingAppointmentId={draggingAppointmentId}
+            prePatientsByStage={prePatientsByStage}
+            stageMetrics={stageMetrics}
+            draggingPrePatientId={draggingPrePatientId}
             handleDragEnd={handleDragEnd}
             handleDragOverStage={handleDragOverStage}
             handleDragStart={handleDragStart}
             handleDropOnStage={handleDropOnStage}
-            patientById={patientById}
-            updatingAppointmentId={updatingAppointmentId}
+            updatingPrePatientId={updatingPrePatientId}
           />
         )}
       </div>

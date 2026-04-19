@@ -1,15 +1,16 @@
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UsersAddCalendarDialog } from '@/components/users/UsersAddCalendarDialog';
 import { UsersCreateDialog } from '@/components/users/UsersCreateDialog';
 import { UsersCalendarsDialog } from '@/components/users/UsersCalendarsDialog';
 import { UsersDeleteDialog } from '@/components/users/UsersDeleteDialog';
 import { UsersEditDialog } from '@/components/users/UsersEditDialog';
 import { UsersGrid } from '@/components/users/UsersGrid';
-
 import { parseCalendarData, useUsersManagement } from '@/hooks/useUsersManagement';
 import { useRealtimeProfiles } from '@/hooks/useRealtimeProfiles';
 import { useAuth } from '@/contexts/AuthContext';
+
 export default function Users() {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
@@ -58,20 +59,49 @@ export default function Users() {
   } = useUsersManagement({
     currentAuthUserId: currentUser?.auth_id,
   });
+
   const handleConfigureSchedule = (userId: string) => {
     navigate(`/users/${userId}/schedule`);
   };
 
+  const doctorsCount = data.filter((profile) => profile.role === 'doctor').length;
+  const secretaryCount = data.filter((profile) => profile.role === 'secretary').length;
+  const ownerCount = data.filter((profile) => profile.role === 'owner').length;
+  const profilesWithContact = data.filter((profile) => profile.email || profile.phone).length;
+  const usersSummaryCards = [
+    {
+      title: 'Equipe total',
+      value: data.length,
+      description: 'Usuarios ativos na operacao da clinica.',
+    },
+    {
+      title: 'Corpo clinico',
+      value: doctorsCount,
+      description: 'Medicos disponiveis para agenda, atendimento e receita.',
+    },
+    {
+      title: 'Recepcao e comercial',
+      value: secretaryCount,
+      description: 'Usuarios que sustentam triagem, agenda e conversao.',
+    },
+    {
+      title: 'Perfis com contato',
+      value: profilesWithContact,
+      description: `${ownerCount} perfil(is) de gestao e ${Math.max(data.length - profilesWithContact, 0)} com cadastro incompleto.`,
+    },
+  ];
 
   return (
     <DashboardLayout requiredRoles={['owner']}>
-      <div className="p-8 space-y-8">
-        <div className="flex justify-between items-center">
+      <div className="space-y-8 p-8">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Gerenciar Usuários</h1>
-            <p className="text-muted-foreground mt-1">Administração de médicos e secretárias</p>
+            <h1 className="text-3xl font-bold text-foreground">Usuarios</h1>
+            <p className="mt-1 text-muted-foreground">
+              Controle de equipe, papeis operacionais e disponibilidade para agenda e atendimento.
+            </p>
           </div>
-          
+
           <UsersCreateDialog
             formData={formData}
             isCreating={isCreating}
@@ -82,12 +112,38 @@ export default function Users() {
           />
         </div>
 
-        {/* Contador de usuários */}
-        <div className="text-sm text-muted-foreground">
-          {loading ? 'Carregando...' : `${data.length} usuario(s) encontrado(s)`}
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+          {usersSummaryCards.map((card) => (
+            <Card key={card.title}>
+              <CardHeader className="pb-3">
+                <CardDescription className="text-xs uppercase tracking-wide">{card.title}</CardDescription>
+                <CardTitle className="text-2xl">{loading ? '...' : card.value}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs text-muted-foreground">{card.description}</CardContent>
+            </Card>
+          ))}
         </div>
 
-        {/* Grid de Cards de Usuarios */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Leitura da Operacao</CardTitle>
+            <CardDescription>
+              O objetivo desta tela e manter a equipe pronta para executar agenda, atendimento e crescimento.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Medicos precisam estar completos para alimentar agenda, consultas e receita prevista.
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Secretarias e time comercial sustentam velocidade de resposta e recuperacao de pacientes.
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Vincule agendas apenas quando o perfil ja estiver pronto para operacao real.
+            </div>
+          </CardContent>
+        </Card>
+
         <UsersGrid
           currentAuthUserId={currentUser?.auth_id}
           isLinkingSchedule={isLinkingSchedule}
@@ -113,8 +169,6 @@ export default function Users() {
         parseCalendarData={parseCalendarData}
         webhookResponse={webhookResponse}
       />
-
-
 
       <UsersEditDialog
         editFormData={editFormData}
@@ -145,10 +199,3 @@ export default function Users() {
     </DashboardLayout>
   );
 }
-
-
-
-
-
-
-
