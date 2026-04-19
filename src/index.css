@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* MedX Blue Theme */
+    --background: 222 47% 11%;
+    --foreground: 0 0% 100%;
+
+    --card: 221 39% 14%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 221 39% 14%;
+    --popover-foreground: 0 0% 100%;
+
+    /* Brand Primary (MedX Blue #008efc => hsl(206 100% 49%)) */
+    --primary: 206 100% 49%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary (darker blue) */
+    --secondary: 206 70% 40%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 221 39% 20%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    /* Accent (lighter blue) */
+    --accent: 206 90% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 221 39% 20%;
+    --input: 221 39% 20%;
+    --ring: 206 100% 49%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar Dark */
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 0 0% 85%;
+    --sidebar-primary: 206 100% 49%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 221 39% 14%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 221 39% 16%;
+    --sidebar-ring: 206 100% 49%;
+
+    /* Chart colors - blue scale */
+    --chart-1: 206 100% 49%;
+    --chart-2: 206 90% 60%;
+    --chart-3: 206 80% 70%;
+    --chart-4: 206 70% 40%;
+    --chart-5: 206 60% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Custom Scrollbar Styles */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/20 rounded-full;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/30;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    @apply bg-primary/40;
+  }
+
+  /* Firefox Scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.2) transparent;
+  }
+
+  /* Garantir box-sizing em tudo */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  /* Scrollbar gutter para evitar sobreposição */
+  .scrollbar-gutter-stable {
+    scrollbar-gutter: stable;
+  }
+}
