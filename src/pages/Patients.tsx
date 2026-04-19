@@ -5,7 +5,7 @@ import { PatientsTable } from '@/components/patients/PatientsTable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePatientsManagement } from '@/hooks/usePatientsManagement';
-import { Plus, Search, UserPlus } from 'lucide-react';
+import { CalendarClock, Plus, Search, ShieldCheck, UserPlus, Users } from 'lucide-react';
 
 const PatientDetailModal = lazy(() =>
   import('@/components/patients/PatientDetailModal').then((module) => ({
@@ -28,6 +28,7 @@ export default function Patients() {
     isCreateDialogOpen,
     isCreating,
     loading,
+    patientInsights,
     searchTerm,
     selectedPatientId,
     setFormData,
@@ -63,6 +64,70 @@ export default function Patients() {
             />
           </div>
         </MagicBentoCard>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MagicBentoCard contentClassName="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Base total</p>
+                <p className="mt-2 text-3xl font-semibold text-foreground">
+                  {patientInsights.totalPatients}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {patientInsights.filteredPatients === patientInsights.totalPatients
+                    ? 'Visao completa da base ativa no CRM.'
+                    : `${patientInsights.filteredPatients} pacientes no filtro atual.`}
+                </p>
+              </div>
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+          </MagicBentoCard>
+
+          <MagicBentoCard contentClassName="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Contato valido</p>
+                <p className="mt-2 text-3xl font-semibold text-foreground">
+                  {patientInsights.reachablePatients}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Pacientes com email ou telefone prontos para acao.
+                </p>
+              </div>
+              <ShieldCheck className="h-5 w-5 text-emerald-500" />
+            </div>
+          </MagicBentoCard>
+
+          <MagicBentoCard contentClassName="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Agenda futura</p>
+                <p className="mt-2 text-3xl font-semibold text-foreground">
+                  {patientInsights.upcomingAppointments}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Pacientes com proxima consulta ja registrada.
+                </p>
+              </div>
+              <CalendarClock className="h-5 w-5 text-sky-500" />
+            </div>
+          </MagicBentoCard>
+
+          <MagicBentoCard contentClassName="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Novos 30 dias</p>
+                <p className="mt-2 text-3xl font-semibold text-foreground">
+                  {patientInsights.recentPatients}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Ritmo recente de crescimento da base de pacientes.
+                </p>
+              </div>
+              <UserPlus className="h-5 w-5 text-amber-500" />
+            </div>
+          </MagicBentoCard>
+        </div>
 
         <MagicBentoCard contentClassName="p-6">
           <PatientsTable

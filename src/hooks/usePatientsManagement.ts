@@ -29,6 +29,14 @@ export type PatientFormData = {
   zip_code: string;
 };
 
+export type PatientInsights = {
+  totalPatients: number;
+  filteredPatients: number;
+  reachablePatients: number;
+  upcomingAppointments: number;
+  recentPatients: number;
+};
+
 const EMPTY_FORM: PatientFormData = {
   name: '',
   email: '',
@@ -81,6 +89,24 @@ export function isValidDate(dateString?: string | null) {
   return date instanceof Date && !isNaN(date.getTime());
 }
 
+export function getPatientInsights(patients: Patient[], filteredPatients: Patient[]): PatientInsights {
+  const now = Date.now();
+  const lastThirtyDays = 1000 * 60 * 60 * 24 * 30;
+
+  return {
+    totalPatients: patients.length,
+    filteredPatients: filteredPatients.length,
+    reachablePatients: patients.filter((patient) => Boolean(patient.email || patient.phone)).length,
+    upcomingAppointments: patients.filter((patient) =>
+      Boolean(patient.next_appointment_date && isValidDate(patient.next_appointment_date))
+    ).length,
+    recentPatients: patients.filter((patient) => {
+      if (!isValidDate(patient.created_at)) return false;
+      return now - new Date(patient.created_at).getTime() <= lastThirtyDays;
+    }).length,
+  };
+}
+
 export function formatWhatsappToDDDNumber(raw?: string | null) {
   if (!raw) return '-';
   const atIdx = raw.indexOf('@');
@@ -117,6 +143,11 @@ export function usePatientsManagement() {
       );
     });
   }, [patients, searchTerm]);
+
+  const patientInsights = useMemo(
+    () => getPatientInsights(patients, filteredPatients),
+    [patients, filteredPatients]
+  );
 
   const handleCreatePatient = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -158,6 +189,7 @@ export function usePatientsManagement() {
     isCreateDialogOpen,
     isCreating,
     loading,
+    patientInsights,
     searchTerm,
     selectedPatientId,
     setFormData,
